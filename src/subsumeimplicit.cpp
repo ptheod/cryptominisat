@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "subsumeimplicit.h"
 #include "clausecleaner.h"
@@ -38,120 +39,13 @@ SubsumeImplicit::SubsumeImplicit(Solver* _solver) :
 {
 }
 
-void SubsumeImplicit::try_subsume_tri(
-    const Lit lit
-    , Watched*& i
-    , Watched*& j
-    , const bool doStamp
-) {
-    //Only treat one of the TRI's instances
-    if (lit > i->lit2()) {
-        *j++ = *i;
-        return;
-    }
-
-    bool remove = false;
-
-    //Subsumed by bin
-    if (lastLit2 == i->lit2()
-        && lastLit3 == lit_Undef
-    ) {
-        if (lastRed && !i->red()) {
-            assert(lastBin->isBin());
-            assert(lastBin->red());
-            assert(lastBin->lit2() == lastLit2);
-
-            lastBin->setRed(false);
-            timeAvailable -= 20;
-            timeAvailable -= solver->watches[lastLit2].size();
-            findWatchedOfBin(solver->watches, lastLit2, lit, true).setRed(false);
-            solver->binTri.redBins--;
-            solver->binTri.irredBins++;
-            lastRed = false;
-        }
-
-        remove = true;
-    }
-
-    //Subsumed by Tri
-    if (!remove
-        && lastLit2 == i->lit2()
-        && lastLit3 == i->lit3()
-    ) {
-        //The sorting algorithm prefers irred to red, so it is
-        //impossible to have irred before red
-        assert(!(i->red() == false && lastRed == true));
-
-        remove = true;
-    }
-
-    tmplits.clear();
-    tmplits.push_back(lit);
-    tmplits.push_back(i->lit2());
-    tmplits.push_back(i->lit3());
-
-    //Subsumed by stamp
-    if (doStamp && !remove
-        && (solver->conf.otfHyperbin || !solver->drat->enabled())
-    ) {
-        timeAvailable -= 15;
-        remove = solver->stamp.stampBasedClRem(tmplits);
-        runStats.stampTriRem += remove;
-    }
-
-    //Subsumed by cache
-    if (!remove
-        && solver->conf.doCache
-        && (solver->conf.otfHyperbin || !solver->drat->enabled())
-    ) {
-        for(size_t at = 0; at < tmplits.size() && !remove; at++) {
-            timeAvailable -= (int64_t)solver->implCache[lit].lits.size();
-            for (vector<LitExtra>::const_iterator
-                it2 = solver->implCache[tmplits[at]].lits.begin()
-                , end2 = solver->implCache[tmplits[at]].lits.end()
-                ; it2 != end2
-                ; it2++
-            ) {
-                if ((   it2->getLit() == tmplits[0]
-                        || it2->getLit() == tmplits[1]
-                        || it2->getLit() == tmplits[2]
-                    )
-                    && it2->getOnlyIrredBin()
-                ) {
-                    remove = true;
-                    runStats.cacheTriRem++;
-                    break;
-                 }
-            }
-        }
-    }
-
-    if (remove) {
-        timeAvailable -= 30;
-        solver->remove_tri_but_lit1(lit, i->lit2(), i->lit3(), i->red(), timeAvailable);
-        runStats.remTris++;
-        (*solver->drat) << del << lit  << i->lit2()  << i->lit3() << fin;
-        return;
-    }
-
-    //Don't remove
-    lastLit2 = i->lit2();
-    lastLit3 = i->lit3();
-    lastRed = i->red();
-
-    *j++ = *i;
-    return;
-}
-
 void SubsumeImplicit::try_subsume_bin(
     const Lit lit
-    , Watched*& i
+    , Watched* i
     , Watched*& j
 ) {
     //Subsume bin with bin
-    if (i->lit2() == lastLit2
-        && lastLit3 == lit_Undef
-    ) {
+    if (i->lit2() == lastLit2) {
         //The sorting algorithm prefers irred to red, so it is
         //impossible to have irred before red
         assert(!(i->red() == false && lastRed == true));
@@ -172,7 +66,6 @@ void SubsumeImplicit::try_subsume_bin(
     } else {
         lastBin = j;
         lastLit2 = i->lit2();
-        lastLit3 = lit_Undef;
         lastRed = i->red();
         *j++ = *i;
     }
@@ -186,7 +79,6 @@ void SubsumeImplicit::subsume_implicit(const bool check_stats)
         1000LL*1000LL*solver->conf.subsume_implicit_time_limitM
         *solver->conf.global_timeout_multiplier;
     timeAvailable = orig_timeAvailable;
-    const bool doStamp = solver->conf.doStamp;
     runStats.clear();
 
     //For randomization, we must have at least 1
@@ -227,10 +119,6 @@ void SubsumeImplicit::subsume_implicit(const bool check_stats)
                     *j++ = *i;
                     break;
 
-                case CMSat::watch_tertiary_t:
-                    try_subsume_tri(lit, i, j, doStamp);
-                    break;
-
                 case CMSat::watch_binary_t:
                     try_subsume_bin(lit, i, j);
                     break;
@@ -249,7 +137,7 @@ void SubsumeImplicit::subsume_implicit(const bool check_stats)
     runStats.numCalled++;
     runStats.time_used += time_used;
     runStats.time_out += time_out;
-    if (solver->conf.verbosity >= 1) {
+    if (solver->conf.verbosity) {
         runStats.print_short(solver);
     }
     if (solver->sqlStats) {
@@ -325,4 +213,12 @@ void SubsumeImplicit::Stats::print() const
 SubsumeImplicit::Stats SubsumeImplicit::get_stats() const
 {
     return globalStats;
+}
+
+double SubsumeImplicit::mem_used() const
+{
+    double mem = sizeof(SubsumeImplicit);
+    mem += tmplits.size()*sizeof(Lit);
+
+    return mem;
 }

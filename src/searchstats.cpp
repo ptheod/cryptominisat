@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "searchstats.h"
 
@@ -57,13 +58,15 @@ SearchStats& SearchStats::operator+=(const SearchStats& other)
     //Red stats
     learntUnits += other.learntUnits;
     learntBins += other.learntBins;
-    learntTris += other.learntTris;
     learntLongs += other.learntLongs;
     otfSubsumed += other.otfSubsumed;
     otfSubsumedImplicit += other.otfSubsumedImplicit;
     otfSubsumedLong += other.otfSubsumedLong;
     otfSubsumedRed += other.otfSubsumedRed;
     otfSubsumedLitsGained += other.otfSubsumedLitsGained;
+    guess_different += other.guess_different;
+    cache_hit += other.cache_hit;
+    red_cl_in_which0 += other.red_cl_in_which0;
 
     //Hyper-bin & transitive reduction
     advancedPropCalled += other.advancedPropCalled;
@@ -114,13 +117,15 @@ SearchStats& SearchStats::operator-=(const SearchStats& other)
     //Red stats
     learntUnits -= other.learntUnits;
     learntBins -= other.learntBins;
-    learntTris -= other.learntTris;
     learntLongs -= other.learntLongs;
     otfSubsumed -= other.otfSubsumed;
     otfSubsumedImplicit -= other.otfSubsumedImplicit;
     otfSubsumedLong -= other.otfSubsumedLong;
     otfSubsumedRed -= other.otfSubsumedRed;
     otfSubsumedLitsGained -= other.otfSubsumedLitsGained;
+    guess_different -= other.guess_different;
+    cache_hit -= other.cache_hit;
+    red_cl_in_which0 -= other.red_cl_in_which0;
 
     //Hyper-bin & transitive reduction
     advancedPropCalled -= other.advancedPropCalled;
@@ -145,7 +150,7 @@ SearchStats SearchStats::operator-(const SearchStats& other) const
     return result;
 }
 
-void SearchStats::printCommon() const
+void SearchStats::printCommon(uint64_t props) const
 {
     print_stats_line("c restarts"
         , numRestarts
@@ -165,15 +170,17 @@ void SearchStats::printCommon() const
         , "% random"
     );
 
+    print_stats_line("c propagations", props);
+
     print_stats_line("c decisions/conflicts"
         , float_div(decisions, conflStats.numConflicts)
     );
 }
 
-void SearchStats::print_short() const
+void SearchStats::print_short(uint64_t props) const
 {
     //Restarts stats
-    printCommon();
+    printCommon(props);
     conflStats.print_short(cpu_time);
 
     print_stats_line("c conf lits non-minim"
@@ -185,11 +192,29 @@ void SearchStats::print_short() const
     print_stats_line("c conf lits final"
         , float_div(litsRedFinal, conflStats.numConflicts)
     );
+
+    print_stats_line("c guess different"
+        , guess_different
+        , stats_line_percent(guess_different, conflStats.numConflicts)
+        , "% of confl"
+    );
+
+    print_stats_line("c cache hit re-learnt cl"
+        , cache_hit
+        , stats_line_percent(cache_hit, conflStats.numConflicts)
+        , "% of confl"
+    );
+
+    print_stats_line("c red which0"
+        , red_cl_in_which0
+        , stats_line_percent(red_cl_in_which0, conflStats.numConflicts)
+        , "% of confl"
+    );
 }
 
-void SearchStats::print() const
+void SearchStats::print(uint64_t props) const
 {
-    printCommon();
+    printCommon(props);
     conflStats.print(cpu_time);
 
     /*assert(numConflicts
@@ -204,11 +229,6 @@ void SearchStats::print() const
     print_stats_line("c bins learnt"
         , learntBins
         , stats_line_percent(learntBins, conflStats.numConflicts)
-        , "% of conflicts");
-
-    print_stats_line("c tris learnt"
-        , learntTris
-        , stats_line_percent(learntTris, conflStats.numConflicts)
         , "% of conflicts");
 
     print_stats_line("c long learnt"
@@ -245,6 +265,24 @@ void SearchStats::print() const
         , otfSubsumedLitsGained
         , ratio_for_stat(otfSubsumedLitsGained, otfSubsumed)
         , "lits/otf subsume"
+    );
+
+    print_stats_line("c guess different"
+        , guess_different
+        , stats_line_percent(guess_different, conflStats.numConflicts)
+        , "% of confl"
+    );
+
+    print_stats_line("c cache hit re-learnt cl"
+        , cache_hit
+        , stats_line_percent(cache_hit, conflStats.numConflicts)
+        , "% of confl"
+    );
+
+    print_stats_line("c red which0"
+        , red_cl_in_which0
+        , stats_line_percent(red_cl_in_which0, conflStats.numConflicts)
+        , "% of confl"
     );
 
     cout << "c SEAMLESS HYPERBIN&TRANS-RED stats" << endl;

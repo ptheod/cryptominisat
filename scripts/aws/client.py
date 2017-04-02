@@ -180,7 +180,8 @@ class solverThread (threading.Thread):
         toexec.append(self.indata["extra_opts"])
         if "cryptominisat" in self.indata["solver"]:
             toexec.append("--printsol 0")
-            toexec.append("--sql 2")
+            if self.indata["stats"]:
+                toexec.append("--sql 2")
 
         toexec.append(self.get_cnf_fname())
         if self.indata["drat"]:
@@ -190,7 +191,7 @@ class solverThread (threading.Thread):
             toexec.append("--keepglue 25")
             toexec.append("--otfsubsume 0")
         else:
-            if "cryptominisat" in self.indata["solver"]:
+            if "cryptominisat" in self.indata["solver"] and self.indata["stats"]:
                 toexec.append("--sqlfull 0")
 
         return " ".join(toexec)
@@ -325,7 +326,7 @@ class solverThread (threading.Thread):
         # k.set_contents_from_filename(self.get_perf_fname() + ".gz")
 
         # sqlite
-        if "cryptominisat" in self.indata["solver"]:
+        if "cryptominisat" in self.indata["solver"] and self.indata["stats"]:
             os.system("gzip -f %s" % self.get_sqlite_fname())
             fname = s3_folder_and_fname + ".sqlite.gz-tmp"
             fname_clean = s3_folder_and_fname_clean + ".sqlite.gz"
@@ -340,7 +341,7 @@ class solverThread (threading.Thread):
         os.unlink(self.get_stdout_fname() + ".gz")
         os.unlink(self.get_stderr_fname() + ".gz")
         # os.unlink(self.get_perf_fname() + ".gz")
-        if "cryptominisat" in self.indata["solver"]:
+        if "cryptominisat" in self.indata["solver"] and self.indata["stats"]:
             os.unlink(self.get_sqlite_fname() + ".gz")
 
         return toreturn
@@ -468,7 +469,11 @@ def build_cryptominisat(indata):
     opts = []
     opts.append(indata["git_rev"])
     opts.append(str(options.num_threads))
-    opts.append("-DSTATS=ON")
+    if indata["stats"]:
+        opts.append("-DSTATS=ON")
+
+    if indata["gauss"]:
+        opts.append("-DUSE_GAUSS=ON")
 
     ret = os.system('%s/cryptominisat/scripts/aws/build_cryptominisat.sh %s >> %s/build.log 2>&1' %
                     (options.base_dir,

@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 #include <string.h>
 #include "streambuffer.h"
-#include "cryptominisat4/cryptominisat.h"
+#include "cryptominisat5/cryptominisat.h"
 #include <cstdlib>
 #include <cmath>
 
@@ -59,9 +59,10 @@ class DimacsParser
         bool printHeader(C& in);
         bool parseComments(C& in, const std::string& str);
         std::string stringify(uint32_t x) const;
-        bool parseSolveComment(C& in);
+        bool parse_solve_simp_comment(C& in, const bool solve);
         void write_solution_to_debuglib_file(const lbool ret) const;
         bool parseIndependentSet(C& in);
+        std::string get_debuglib_fname() const;
 
 
         SATSolver* solver;
@@ -88,7 +89,7 @@ class DimacsParser
 #include <vector>
 #include <fstream>
 #include <complex>
-#include "assert.h"
+#include <cassert>
 
 using std::vector;
 using std::cout;
@@ -190,7 +191,7 @@ bool DimacsParser<C>::printHeader(C& in)
         ) {
             return false;
         }
-        if (verbosity >= 1) {
+        if (verbosity) {
             cout << "c -- header says num vars:   " << std::setw(12) << num_vars << endl;
             cout << "c -- header says num clauses:" <<  std::setw(12) << clauses << endl;
         }
@@ -208,7 +209,14 @@ bool DimacsParser<C>::printHeader(C& in)
         }
     } else {
         std::cerr
-        << "PARSE ERROR! Unexpected char: '" << *in
+        << "PARSE ERROR! Unexpected char (hex: " << std::hex
+        << std::setw(2)
+        << std::setfill('0')
+        << "0x" << *in
+        << std::setfill(' ')
+        << std::dec
+        << ")"
+        << " At line " << lineNum+1
         << "' in the header, at line " << lineNum+1
         << please_read_dimacs
         << endl;
@@ -219,7 +227,14 @@ bool DimacsParser<C>::printHeader(C& in)
 }
 
 template<class C>
-bool DimacsParser<C>::parseSolveComment(C& in)
+std::string DimacsParser<C>::get_debuglib_fname() const
+{
+    std::string sol_fname = debugLib + "-debugLibPart" + stringify(debugLibPart) +".output";
+    return sol_fname;
+}
+
+template<class C>
+bool DimacsParser<C>::parse_solve_simp_comment(C& in, const bool solve)
 {
     vector<Lit> assumps;
     in.skipWhitespace();
@@ -232,25 +247,35 @@ bool DimacsParser<C>::parseSolveComment(C& in)
         in.skipWhitespace();
     }
 
-    if (verbosity >= 2) {
+    if (verbosity) {
         cout
-        << "c -----------> Solver::solve() called (number: "
+        << "c -----------> Solver::"
+        << (solve ? "solve" : "simplify")
+        <<" called (number: "
         << std::setw(3) << debugLibPart << ") with assumps :";
         for(Lit lit: assumps) {
             cout << lit << " ";
         }
-        cout
-        << "<-----------"
-        << endl;
+        cout << "<-----------" << endl;
     }
 
-    lbool ret = solver->solve(&assumps);
-
-    write_solution_to_debuglib_file(ret);
-    debugLibPart++;
+    lbool ret;
+    if (solve) {
+        if (verbosity) {
+            cout << "c Solution will be written to: "
+            << get_debuglib_fname() << endl;
+        }
+        ret = solver->solve(&assumps);
+        write_solution_to_debuglib_file(ret);
+        debugLibPart++;
+    } else {
+        ret = solver->simplify(&assumps);
+    }
 
     if (verbosity >= 6) {
-        cout << "c Parsed Solver::solve()" << endl;
+        cout << "c Parsed Solver::"
+        << (solve ? "solve" : "simplify")
+        << endl;
     }
     return true;
 }
@@ -259,7 +284,7 @@ template<class C>
 void DimacsParser<C>::write_solution_to_debuglib_file(const lbool ret) const
 {
     //Open file for writing
-    std::string s = debugLib + "-debugLibPart" + stringify(debugLibPart) +".output";
+    std::string s = get_debuglib_fname();
     std::ofstream partFile;
     partFile.open(s.c_str());
     if (!partFile) {
@@ -298,7 +323,11 @@ template<class C>
 bool DimacsParser<C>::parseComments(C& in, const std::string& str)
 {
     if (!debugLib.empty() && str.substr(0, 13) == "Solver::solve") {
-        if (!parseSolveComment(in)) {
+        if (!parse_solve_simp_comment(in, true)) {
+            return false;
+        }
+    } else if (!debugLib.empty() && str.substr(0, 16) == "Solver::simplify") {
+        if (!parse_solve_simp_comment(in, false)) {
             return false;
         }
     } else if (!debugLib.empty() && str == "Solver::new_var()") {
@@ -342,6 +371,7 @@ bool DimacsParser<C>::parse_and_add_clause(C& in)
     if (!readClause(in)) {
         return false;
     }
+    in.skipWhitespace();
     if (!in.skipEOL(lineNum)) {
         return false;
     }
@@ -440,7 +470,7 @@ bool DimacsParser<C>::parse_DIMACS(T input_stream)
         return false;
     }
 
-    if (verbosity >= 1) {
+    if (verbosity) {
         cout
         << "c -- clauses added: " << norm_clauses_added << endl
         << "c -- xor clauses added: " << xor_clauses_added << endl

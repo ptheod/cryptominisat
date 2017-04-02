@@ -1,24 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
 
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include <set>
 #include <map>
@@ -134,7 +134,7 @@ void CompFinder::print_and_add_to_sql_result(const double myTime) const
 
     assert(reverse_table_is_correct());
 
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout
         << "c [comp] Found component(s): " <<  reverseTable.size()
         << " BP: "
@@ -175,7 +175,6 @@ void CompFinder::add_clauses_to_component(const vector<ClOffset>& cs)
 void CompFinder::addToCompImplicits()
 {
     vector<Lit> lits;
-    vector<uint16_t>& seen = solver->seen;
 
     for (size_t var = 0; var < solver->nVars(); var++) {
         if (bogoprops_remain <= 0) {
@@ -196,8 +195,7 @@ void CompFinder::addToCompImplicits()
                 continue;
 
             bogoprops_remain -= ws.size() + 10;
-            for(watch_subarray::const_iterator
-                it2 = ws.begin(), end2 = ws.end()
+            for(const Watched *it2 = ws.begin(), *end2 = ws.end()
                 ; it2 != end2
                 ; it2++
             ) {
@@ -210,24 +208,6 @@ void CompFinder::addToCompImplicits()
                     if (!seen[it2->lit2().var()]) {
                         lits.push_back(it2->lit2());
                         seen[it2->lit2().var()] = 1;
-                    }
-                }
-
-                if (it2->isTri()
-                    //irredundant
-                    && !it2->red()
-                    //Only do each tri once
-                    && lit < it2->lit3()
-                    && it2->lit2() < it2->lit3()
-                ) {
-                    if (!seen[it2->lit2().var()]) {
-                        lits.push_back(it2->lit2());
-                        seen[it2->lit2().var()] = 1;
-                    }
-
-                    if (!seen[it2->lit3().var()]) {
-                        lits.push_back(it2->lit3());
-                        seen[it2->lit3().var()] = 1;
                     }
                 }
             }

@@ -25,9 +25,15 @@ import ntpath
 import os
 
 from optparse import OptionParser
-parser = OptionParser()
+usage = """
+./reconf.py -n 15 ~/media/sat/out/satcomp091113/reconf0-09113-23-July-2015-mark-XZGKC-78499d3f2-tout-5000-mout-1600/*.stdout* ~/media/sat/out/satcomp091113/reconf14-091113-28-August-2015-mark-O5T8F-169dfc802-tout-5000-mout-1600/*.stdout*
+
+NOTE: you *must* have reconf14 in there or a lot of data will be missing
+in particular avg_confl_size, which will make the system error out on you.
+"""
+parser = OptionParser(usage=usage)
 parser.add_option("-f", "--file",
-                  dest="outfname", type=str,
+                  dest="outfname", type=str, default="outfile",
                   help="print final values to this file")
 parser.add_option("-n", "--num",
                   dest="num", type=int,
@@ -61,30 +67,7 @@ if options.ignore:
         r = int(r)
         ignore[r] = True
 
-order = ["numVars", "numClauses", "var_cl_ratio", "binary", "trinary", "horn",
-         "horn_mean", "horn_std", "horn_min", "horn_max", "horn_spread",
-         "vcg_var_mean", "vcg_var_std", "vcg_var_min", "vcg_var_max",
-         "vcg_var_spread", "vcg_cls_mean", "vcg_cls_std", "vcg_cls_min",
-         "vcg_cls_max", "vcg_cls_spread", "pnr_var_mean", "pnr_var_std",
-         "pnr_var_min", "pnr_var_max", "pnr_var_spread", "pnr_cls_mean",
-         "pnr_cls_std", "pnr_cls_min", "pnr_cls_max", "pnr_cls_spread",
-         "avg_confl_size", "confl_size_min", "confl_size_max",
-         "avg_confl_glue", "confl_glue_min", "confl_glue_max",
-         "avg_num_resolutions", "num_resolutions_min",
-         "num_resolutions_max", "learnt_bins_per_confl",
-         "learnt_tris_per_confl", "avg_branch_depth", "branch_depth_min",
-         "branch_depth_max", "avg_trail_depth_delta", "trail_depth_delta_min",
-         "trail_depth_delta_max", "avg_branch_depth_delta", "props_per_confl",
-         "confl_per_restart", "decisions_per_conflict",
-         "irred-glue_distr_mean", "irred-glue_distr_var",
-         "irred-size_distr_mean", "irred-size_distr_var",
-         "irred-uip_use_distr_mean", "irred-uip_use_distr_var",
-         "irred-activity_distr_mean", "irred-activity_distr_var",
-         "red-glue_distr_mean", "red-glue_distr_var", "red-size_distr_mean",
-         "red-size_distr_var", "red-uip_use_distr_mean",
-         "red-uip_use_distr_var", "red-activity_distr_mean",
-         "red-activity_distr_var", "num_gates_found_last",
-         "num_xors_found_last"]
+order = ["numVars", "numClauses", "var_cl_ratio", "binary", "trinary", "horn", "horn_mean", "horn_std", "horn_min", "horn_max", "horn_spread", "vcg_var_mean", "vcg_var_std", "vcg_var_min", "vcg_var_max", "vcg_var_spread", "vcg_cls_mean", "vcg_cls_std", "vcg_cls_min", "vcg_cls_max", "vcg_cls_spread", "pnr_var_mean", "pnr_var_std", "pnr_var_min", "pnr_var_max", "pnr_var_spread", "pnr_cls_mean", "pnr_cls_std", "pnr_cls_min", "pnr_cls_max", "pnr_cls_spread", "avg_confl_size", "confl_size_min", "confl_size_max", "avg_confl_glue", "confl_glue_min", "confl_glue_max", "avg_num_resolutions", "num_resolutions_min", "num_resolutions_max", "learnt_bins_per_confl", "learnt_tris_per_confl", "avg_branch_depth", "branch_depth_min", "branch_depth_max", "avg_trail_depth_delta", "trail_depth_delta_min", "trail_depth_delta_max", "avg_branch_depth_delta", "props_per_confl", "confl_per_restart", "decisions_per_conflict", "irred_cl_distrib.glue_distr_mean", "irred_cl_distrib.glue_distr_var", "irred_cl_distrib.size_distr_mean", "irred_cl_distrib.size_distr_var", "irred_cl_distrib.uip_use_distr_mean", "irred_cl_distrib.uip_use_distr_var", "irred_cl_distrib.activity_distr_mean", "irred_cl_distrib.activity_distr_var", "red_cl_distrib.glue_distr_mean", "red_cl_distrib.glue_distr_var", "red_cl_distrib.size_distr_mean", "red_cl_distrib.size_distr_var", "red_cl_distrib.uip_use_distr_mean", "red_cl_distrib.uip_use_distr_var", "red_cl_distrib.activity_distr_mean", "red_cl_distrib.activity_distr_var", "num_gates_found_last", "num_xors_found_last"]
 
 f = open("outs/reconf.names", "w")
 f.write("reconf.                     | the target attribute\n\n")
@@ -139,11 +122,11 @@ def print_features_and_scores(fname, features, reconfs_scores):
     print r_s
 
     if nobody_could_solve_it(r_s):
-        print "%s Nobody could solve it" % fname
+        print "Nobody could solve: %s" % fname
         return -1, False
 
     if all_above_fixed_score(r_s, options.ignore_threshold):
-        print "%s All above score" % (fname)
+        print "All above score: %s" % (fname)
         return -2, False
 
     print "Calculating +/- for %s" % fname
@@ -237,6 +220,7 @@ def parse_file(fname):
     if reconf in ignore:
         score = 0
 
+    #print "features:", features
     return fname_clean, reconf, features, score
 
 all_files = set()
@@ -287,37 +271,54 @@ for i in range(options.num):
     else:
         outf.append(None)
 
-best_reconf = {}
-only_this = {}
+best_reconf = {'all_above_fixed_score': 0, 'nobody_could_solve_it': 0}
+for x in range(options.num):
+    best_reconf[x] = 0
+only_this = dict(best_reconf)
+
 for fname in all_files:
     print "calculating final DATs for CNF ", fname
     if all_files_features[fname] is None:
         print "solved too early, no features, skipping"
         continue
 
+    print "all_files_features[fname]:", all_files_features[fname]
     if "avg_confl_size" not in all_files_features[fname]:
         print "WARNING This is weird, probably not solved by one (different features than everything else), skipping"
         continue
 
+    if all_files_features[fname] is None:
+        print "features for file is None: %s" % fname
+
     if all_files_features[fname] is not None:
         best, only_this_could_solve_it = print_features_and_scores(fname, all_files_features[fname], all_files_scores[fname])
 
-        if best not in best_reconf:
-            best_reconf[best] = 1
-        else:
-            best_reconf[best] = best_reconf[best] + 1
+        if best == -2:
+            best = "all_above_fixed_score"
 
+        if best == -1:
+            best = "nobody_could_solve_it"
+
+        print "best here:", best
+        best_reconf[best] = best_reconf[best] + 1
         if only_this_could_solve_it:
-            if best not in only_this:
-                only_this[best] = 1
-            else:
-                only_this[best] = only_this[best] + 1
+            only_this[best] = only_this[best] + 1
 
         print ""
 
-print "best reconfs: ", best_reconf
-print "uniquely solved by: ", only_this
+print "\n-----------------------------"
+print "best reconfs: "
+for a, b in best_reconf.iteritems():
+    if a not in ignore:
+        print "%-20s : %-3d" % (a, b)
+
+print "\n-----------------------------"
+print "uniquely solved by: "
+for a, b in only_this.iteritems():
+    if a not in ignore:
+        print "%-20s : %-3d" % (a, b)
 
 for i in range(options.num):
     if outf[i] is not None:
         outf[i].close()
+

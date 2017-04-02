@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifdef KLEE
 #include <klee/klee.h>
@@ -27,15 +28,16 @@
 #include "gtest/gtest.h"
 #endif
 
-#include "cryptominisat4/solvertypesmini.h"
+#include "cryptominisat5/solvertypesmini.h"
 #include <vector>
 #include <ostream>
 #include <iostream>
 #include <sstream>
+#include <cassert>
 #include "src/solver.h"
 #include "src/stamp.h"
 #include "src/xor.h"
-#include "cryptominisat4/cryptominisat.h"
+#include "cryptominisat5/cryptominisat.h"
 
 using std::cout;
 using std::endl;
@@ -85,9 +87,10 @@ vector<Lit> str_to_cl(const string& data)
     }
 
     vector<Lit> ret;
-    for(string& token: tokens) {
-        long int i = str_to_long_int(token);
-        Lit lit(abs(i)-1, i < 0);
+    for(string& token2: tokens) {
+        long int i = str_to_long_int(token2);
+        assert(i == (int)i);
+        Lit lit(std::abs(i)-1, i < 0);
         ret.push_back(lit);
     }
     //cout << "input is: " << data << " LITs is: " << ret << endl;
@@ -186,18 +189,6 @@ void add_impl_cls(
                 cl.push_back(ws.lit2());
                 ret.push_back(cl);
             }
-
-            if (ws.isTri()
-                && lit < ws.lit2()
-                && lit < ws.lit3()
-                && ((add_irred && !ws.red()) || (add_red && ws.red()))
-            ) {
-                vector<Lit> cl;
-                cl.push_back(lit);
-                cl.push_back(ws.lit2());
-                cl.push_back(ws.lit3());
-                ret.push_back(cl);
-            }
         }
     }
 }
@@ -215,7 +206,7 @@ vector<vector<Lit> > get_irred_cls(const Solver* s)
 vector<vector<Lit> > get_red_cls(const Solver* s)
 {
     vector<vector<Lit> > ret;
-    add_cls(ret, s, s->longRedCls);
+    add_cls(ret, s, s->longRedCls[0]);
     add_impl_cls(ret, s, false, true);
 
     return ret;
@@ -546,6 +537,31 @@ void check_zero_assigned_lits_contains(Solver* s, const string& data)
             EXPECT_TRUE(found_lit);
         }
     }
+}
+
+bool clause_satisfied(const string& data, vector<lbool>& solution)
+{
+    vector<Lit> lits = str_to_cl(data);
+    for(Lit l: lits) {
+        if (solution[l.var()] == l_Undef) {
+            continue;
+        }
+        if ((solution[l.var()] ^ l.sign()) == l_True) {
+            return true;
+        }
+    }
+    return false;
+}
+
+uint32_t count_num_undef_in_solution(const Solver* s)
+{
+    uint32_t num = 0;
+    for(size_t i = 0; i < s->nVarsOuter(); i++) {
+        if (s->model_value(i) == l_Undef) {
+            num++;
+        }
+    }
+    return num;
 }
 
 // string print(const vector<Lit>& dat) {

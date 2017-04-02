@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "bva.h"
 #include "occsimplifier.h"
@@ -86,7 +87,7 @@ bool BVA::bounded_var_addition()
             break;
         }
 
-        const Lit lit = Lit::toLit(var_bva_order.remove_min());
+        const Lit lit = Lit::toLit(var_bva_order.removeMin());
         if (solver->conf.verbosity >= 5 || bva_verbosity) {
             cout << "c [occ-bva] trying lit " << lit << endl;
         }
@@ -99,12 +100,12 @@ bool BVA::bounded_var_addition()
     bool time_out = *simplifier->limit_to_decrease <= 0;
     const double time_used = cpuTime() - my_time;
     double time_remain = float_div(*simplifier->limit_to_decrease ,limit_orig);
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout
         << "c [occ-bva] added: " << bva_worked
         << " simp: " << bva_simp_size
         << " 2lit: " << ((solver->conf.bva_also_twolit_diff
-            && (long)solver->sumConflicts() >= solver->conf.bva_extra_lit_and_red_start) ? "Y" : "N")
+            && (long)solver->sumConflicts >= solver->conf.bva_extra_lit_and_red_start) ? "Y" : "N")
         << solver->conf.print_times(time_used, time_out, time_remain)
         << endl;
     }
@@ -136,12 +137,6 @@ void BVA::remove_duplicates_from_m_cls()
             if (btype == watch_binary_t && atype != CMSat::watch_binary_t) {
                 return false;
             }
-            if (atype == watch_tertiary_t && btype != CMSat::watch_tertiary_t) {
-                return true;
-            }
-            if (btype == watch_tertiary_t && atype != CMSat::watch_tertiary_t) {
-                return false;
-            }
 
             assert(atype == btype);
             switch(atype) {
@@ -149,14 +144,6 @@ void BVA::remove_duplicates_from_m_cls()
                     //subsumption could have time-outed
                     //assert(a.ws.lit2() != b.ws.lit2() && "Implicit has been cleaned of duplicates!!");
                     return a.ws.lit2() < b.ws.lit2();
-                }
-                case CMSat::watch_tertiary_t: {
-                    if (a.ws.lit2() != b.ws.lit2()) {
-                        return a.ws.lit2() < b.ws.lit2();
-                    }
-                    //subsumption could have time-outed
-                    //assert(a.ws.lit3() != b.ws.lit3() && "Implicit has been cleaned of duplicates!!");
-                    return a.ws.lit3() < b.ws.lit3();
                 }
                 case CMSat::watch_clause_t: {
                     *simplifier->limit_to_decrease -= 20;
@@ -178,7 +165,6 @@ void BVA::remove_duplicates_from_m_cls()
                     // This should never be here
                     assert(false);
                     exit(-1);
-                    break;
                 }
             }
 
@@ -205,12 +191,6 @@ void BVA::remove_duplicates_from_m_cls()
                 if (prev.lit2() == next.lit2()) {
                     del = true;
                 }
-                break;
-            }
-
-            case CMSat::watch_tertiary_t: {
-                if (prev.lit2() == next.lit2() && prev.lit3() == next.lit3())
-                    del = true;
                 break;
             }
 
@@ -348,7 +328,7 @@ bool BVA::bva_simplify_system()
     const uint32_t newvar = solver->nVars()-1;
     const Lit new_lit(newvar, false);
 
-    //Binary clauses
+    //Binary/Tertiary clauses
     for(const lit_pair m_lit: m_lits) {
         bva_tmp_lits.clear();
         bva_tmp_lits.push_back(m_lit.lit1);
@@ -356,7 +336,12 @@ bool BVA::bva_simplify_system()
             bva_tmp_lits.push_back(m_lit.lit2);
         }
         bva_tmp_lits.push_back(new_lit);
-        solver->add_clause_int(bva_tmp_lits, false, ClauseStats(), false, &bva_tmp_lits, true, new_lit);
+        Clause* newCl = solver->add_clause_int(bva_tmp_lits, false, ClauseStats(), false, &bva_tmp_lits, true, new_lit);
+        if (newCl != NULL) {
+            simplifier->linkInClause(*newCl);
+            ClOffset offset = solver->cl_alloc.get_offset(newCl);
+            simplifier->clauses.push_back(offset);
+        }
         touched.touch(bva_tmp_lits);
     }
 
@@ -385,14 +370,14 @@ void BVA::update_touched_lits_in_bva()
     const vector<uint32_t>& touched_list = touched.getTouchedList();
     for(const uint32_t lit_uint: touched_list) {
         const Lit lit = Lit::toLit(lit_uint);
-        if (var_bva_order.in_heap(lit.toInt())) {
+        if (var_bva_order.inHeap(lit.toInt())) {
             watch_irred_sizes[lit.toInt()] = calc_watch_irred_size(lit);
-            var_bva_order.update_if_inside(lit.toInt());
+            var_bva_order.update(lit.toInt());
         }
 
-        if (var_bva_order.in_heap((~lit).toInt())) {
+        if (var_bva_order.inHeap((~lit).toInt())) {
             watch_irred_sizes[(~lit).toInt()] = calc_watch_irred_size(~lit);
-            var_bva_order.update_if_inside((~lit).toInt());
+            var_bva_order.update((~lit).toInt());
         }
     }
     touched.clear();
@@ -408,12 +393,6 @@ void BVA::fill_m_cls_lits_and_red()
         switch(cl.ws.getType()) {
             case CMSat::watch_binary_t: {
                 tmp.push_back(cl.ws.lit2());
-                red = cl.ws.red();
-                break;
-            }
-            case CMSat::watch_tertiary_t: {
-                tmp.push_back(cl.ws.lit2());
-                tmp.push_back(cl.ws.lit3());
                 red = cl.ws.red();
                 break;
             }
@@ -433,7 +412,6 @@ void BVA::fill_m_cls_lits_and_red()
                 // This should never be here
                 assert(false);
                 exit(-1);
-                break;
             }
         }
         m_cls_lits.push_back(m_cls_lits_and_red(tmp, red));
@@ -470,15 +448,6 @@ void BVA::remove_matching_clause(
             break;
         }
 
-        case 3: {
-            std::sort(to_remove.begin(), to_remove.end());
-            *simplifier->limit_to_decrease -= 2*solver->watches[to_remove[0]].size();
-            bool red = false;
-            *(solver->drat) << del << to_remove << fin;
-            solver->detach_tri_clause(to_remove[0], to_remove[1], to_remove[2], red);
-            break;
-        }
-
         default:
             Clause* cl_new = find_cl_for_bva(to_remove, cl_lits_and_red.red);
             simplifier->unlink_clause(solver->cl_alloc.get_offset(cl_new));
@@ -504,6 +473,10 @@ Clause* BVA::find_cl_for_bva(
         ) {
             continue;
         }
+        #ifdef SLOW_DEBUG
+        assert(!cl->freed());
+        assert(!cl->getRemoved());
+        #endif
 
         bool OK = true;
         for(const Lit lit: *cl) {
@@ -534,16 +507,8 @@ bool BVA::add_longer_clause(const Lit new_lit, const OccurClause& cl)
             lits.resize(2);
             lits[0] = new_lit;
             lits[1] = cl.ws.lit2();
-            solver->add_clause_int(lits, false, ClauseStats(), false, &lits, true, new_lit);
-            break;
-        }
-
-        case CMSat::watch_tertiary_t: {
-            lits.resize(3);
-            lits[0] = new_lit;
-            lits[1] = cl.ws.lit2();
-            lits[2] = cl.ws.lit3();
-            solver->add_clause_int(lits, false, ClauseStats(), false, &lits, true, new_lit);
+            Clause* cl = solver->add_clause_int(lits, false, ClauseStats(), false, &lits, true, new_lit);
+            assert(cl == NULL);
             break;
         }
 
@@ -570,7 +535,6 @@ bool BVA::add_longer_clause(const Lit new_lit, const OccurClause& cl)
             // This should never be here
             assert(false);
             exit(-1);
-            break;
         }
     }
     touched.touch(lits);
@@ -631,7 +595,7 @@ void BVA::fill_potential(const Lit lit)
                 && (sz_c == sz_d
                     || (sz_c+1 == sz_d
                         && solver->conf.bva_also_twolit_diff
-                        && (long)solver->sumConflicts() >= solver->conf.bva_extra_lit_and_red_start
+                        && (long)solver->sumConflicts >= solver->conf.bva_extra_lit_and_red_start
                     )
                 )
                 && !solver->redundant(d.ws)
@@ -808,7 +772,7 @@ size_t BVA::calc_watch_irred_size(const Lit lit) const
     size_t num = 0;
     watch_subarray_const ws = solver->watches[lit];
     for(const Watched w: ws) {
-        if (w.isBin() || w.isTri()) {
+        if (w.isBin()) {
             num += !w.red();
             continue;
         }

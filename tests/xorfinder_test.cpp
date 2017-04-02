@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "gtest/gtest.h"
 
@@ -124,6 +125,27 @@ TEST_F(xor_finder, find_4_1)
     check_xors_eq(finder.xors, "1, 2, 3, 4 = 0;");
 }
 
+TEST_F(xor_finder, find_4_4)
+{
+    s->add_clause_outer(str_to_cl("-1, -2, 3, 4"));
+    s->add_clause_outer(str_to_cl("1, -2, -3, 4"));
+    s->add_clause_outer(str_to_cl("1, 2, -3, -4"));
+    s->add_clause_outer(str_to_cl("-1, 2,  -3, 4"));
+    s->add_clause_outer(str_to_cl("-1, 2,  3, -4"));
+    s->add_clause_outer(str_to_cl("1, -2,  3, -4"));
+    s->add_clause_outer(str_to_cl("-1, -2, -3, -4"));
+    s->add_clause_outer(str_to_cl("1, 2, 3, 4"));
+
+    occsimp->setup();
+    XorFinder finder(occsimp, s);
+    finder.find_xors();
+    check_xors_eq(finder.xors, "1, 2, 3, 4 = 1");
+}
+
+/*
+ * These tests only work if the matching is non-exact
+ * i.e. if size is not checked for equality
+ *
 TEST_F(xor_finder, find_4_2)
 {
     s->add_clause_outer(str_to_cl("-1, 2, 3, 4"));
@@ -160,21 +182,35 @@ TEST_F(xor_finder, find_4_3)
     check_xors_eq(finder.xors, "1, 2, 3, 4 = 0;");
 }
 
-TEST_F(xor_finder, find_4_4)
+TEST_F(xor_finder, find_5_2)
 {
-    s->add_clause_outer(str_to_cl("-1, -2, 3, 4"));
-    s->add_clause_outer(str_to_cl("1, -2, -3, 4"));
-    s->add_clause_outer(str_to_cl("1, 2, -3, -4"));
-    s->add_clause_outer(str_to_cl("-1, 2,  -3, 4"));
-    s->add_clause_outer(str_to_cl("-1, 2,  3, -4"));
-    s->add_clause_outer(str_to_cl("1, -2,  3, -4"));
-    s->add_clause_outer(str_to_cl("-1, -2, -3, -4"));
-    s->add_clause_outer(str_to_cl("1, 2, 3, 4"));
+    s->add_clause_outer(str_to_cl("-1, -2, 3, 4, 5"));
+    s->add_clause_outer(str_to_cl("-1, 2, -3"));
+    s->add_clause_outer(str_to_cl("-1, 2, 3"));
+
+    s->add_clause_outer(str_to_cl("1, -2, -3, 4, 5"));
+    s->add_clause_outer(str_to_cl("1, -2, 3, -4, 5"));
+    s->add_clause_outer(str_to_cl("1, -2, 3, 4, -5"));
+
+    s->add_clause_outer(str_to_cl("1, 2, -3, -4, 5"));
+    s->add_clause_outer(str_to_cl("1, 2, -3, 4, -5"));
+
+    s->add_clause_outer(str_to_cl("1, 2, 3, -4, -5"));
+
+    //
+
+    s->add_clause_outer(str_to_cl("1, -2, -3, -4, -5"));
+    s->add_clause_outer(str_to_cl("-1, 2, -3, -4, -5"));
+    s->add_clause_outer(str_to_cl("-1, -2, 3, -4, -5"));
+    s->add_clause_outer(str_to_cl("-1, -2, -3, 4, -5"));
+    s->add_clause_outer(str_to_cl("-1, -2, -3, -4, 5"));
+
+    s->add_clause_outer(str_to_cl("1, 2, 3, 4, 5"));
 
     occsimp->setup();
     XorFinder finder(occsimp, s);
     finder.find_xors();
-    check_xors_eq(finder.xors, "1, 2, 3, 4 = 1");
+    check_xors_eq(finder.xors, "1, 2, 3, 4, 5 = 1;");
 }
 
 TEST_F(xor_finder, find_4_5)
@@ -203,6 +239,7 @@ TEST_F(xor_finder, find_4_5)
     finder.find_xors();
     check_xors_eq(finder.xors, "1, 2, 3, 4 = 1; 1, 2, 3, 4 = 0");
 }
+*/
 
 TEST_F(xor_finder, find_5_1)
 {
@@ -236,43 +273,95 @@ TEST_F(xor_finder, find_5_1)
     check_xors_eq(finder.xors, "1, 2, 3, 4, 5 = 1;");
 }
 
-TEST_F(xor_finder, find_5_2)
+TEST_F(xor_finder, find_6_0)
 {
-    s->add_clause_outer(str_to_cl("-1, -2, 3, 4, 5"));
-    s->add_clause_outer(str_to_cl("-1, 2, -3"));
-    s->add_clause_outer(str_to_cl("-1, 2, 3"));
-
-    s->add_clause_outer(str_to_cl("1, -2, -3, 4, 5"));
-    s->add_clause_outer(str_to_cl("1, -2, 3, -4, 5"));
-    s->add_clause_outer(str_to_cl("1, -2, 3, 4, -5"));
-
-    s->add_clause_outer(str_to_cl("1, 2, -3, -4, 5"));
-    s->add_clause_outer(str_to_cl("1, 2, -3, 4, -5"));
-
-    s->add_clause_outer(str_to_cl("1, 2, 3, -4, -5"));
-
-    //
-
-    s->add_clause_outer(str_to_cl("1, -2, -3, -4, -5"));
-    s->add_clause_outer(str_to_cl("-1, 2, -3, -4, -5"));
-    s->add_clause_outer(str_to_cl("-1, -2, 3, -4, -5"));
-    s->add_clause_outer(str_to_cl("-1, -2, -3, 4, -5"));
-    s->add_clause_outer(str_to_cl("-1, -2, -3, -4, 5"));
-
-    s->add_clause_outer(str_to_cl("1, 2, 3, 4, 5"));
+    s->add_clause_outer(str_to_cl("1, -7, -3, -4, -5, -9"));
+    s->add_clause_outer(str_to_cl("-1, 7, -3, -4, -5, -9"));
+    s->add_clause_outer(str_to_cl("-1, -7, 3, -4, -5, -9"));
+    s->add_clause_outer(str_to_cl("1, 7, 3, -4, -5, -9"));
+    s->add_clause_outer(str_to_cl("-1, -7, -3, 4, -5, -9"));
+    s->add_clause_outer(str_to_cl("1, 7, -3, 4, -5, -9"));
+    s->add_clause_outer(str_to_cl("1, -7, 3, 4, -5, -9"));
+    s->add_clause_outer(str_to_cl("-1, 7, 3, 4, -5, -9"));
+    s->add_clause_outer(str_to_cl("-1, -7, -3, -4, 5, -9"));
+    s->add_clause_outer(str_to_cl("1, 7, -3, -4, 5, -9"));
+    s->add_clause_outer(str_to_cl("1, -7, 3, -4, 5, -9"));
+    s->add_clause_outer(str_to_cl("-1, 7, 3, -4, 5, -9"));
+    s->add_clause_outer(str_to_cl("1, -7, -3, 4, 5, -9"));
+    s->add_clause_outer(str_to_cl("-1, 7, -3, 4, 5, -9"));
+    s->add_clause_outer(str_to_cl("-1, -7, 3, 4, 5, -9"));
+    s->add_clause_outer(str_to_cl("1, 7, 3, 4, 5, -9"));
+    s->add_clause_outer(str_to_cl("-1, -7, -3, -4, -5, 9"));
+    s->add_clause_outer(str_to_cl("1, 7, -3, -4, -5, 9"));
+    s->add_clause_outer(str_to_cl("1, -7, 3, -4, -5, 9"));
+    s->add_clause_outer(str_to_cl("-1, 7, 3, -4, -5, 9"));
+    s->add_clause_outer(str_to_cl("1, -7, -3, 4, -5, 9"));
+    s->add_clause_outer(str_to_cl("-1, 7, -3, 4, -5, 9"));
+    s->add_clause_outer(str_to_cl("-1, -7, 3, 4, -5, 9"));
+    s->add_clause_outer(str_to_cl("1, 7, 3, 4, -5, 9"));
+    s->add_clause_outer(str_to_cl("1, -7, -3, -4, 5, 9"));
+    s->add_clause_outer(str_to_cl("-1, 7, -3, -4, 5, 9"));
+    s->add_clause_outer(str_to_cl("-1, -7, 3, -4, 5, 9"));
+    s->add_clause_outer(str_to_cl("1, 7, 3, -4, 5, 9"));
+    s->add_clause_outer(str_to_cl("-1, -7, -3, 4, 5, 9"));
+    s->add_clause_outer(str_to_cl("1, 7, -3, 4, 5, 9"));
+    s->add_clause_outer(str_to_cl("1, -7, 3, 4, 5, 9"));
+    s->add_clause_outer(str_to_cl("-1, 7, 3, 4, 5, 9"));
 
     occsimp->setup();
     XorFinder finder(occsimp, s);
     finder.find_xors();
-    check_xors_eq(finder.xors, "1, 2, 3, 4, 5 = 1;");
+    check_xors_eq(finder.xors, "1, 7, 3, 4, 5, 9 = 0;");
 }
+
+TEST_F(xor_finder, find_6_1)
+{
+    s->add_clause_outer(str_to_cl("-6, -7, -3, -4, -5, -9"));
+    s->add_clause_outer(str_to_cl("6, 7, -3, -4, -5, -9"));
+    s->add_clause_outer(str_to_cl("6, -7, 3, -4, -5, -9"));
+    s->add_clause_outer(str_to_cl("-6, 7, 3, -4, -5, -9"));
+    s->add_clause_outer(str_to_cl("6, -7, -3, 4, -5, -9"));
+    s->add_clause_outer(str_to_cl("-6, 7, -3, 4, -5, -9"));
+    s->add_clause_outer(str_to_cl("-6, -7, 3, 4, -5, -9"));
+    s->add_clause_outer(str_to_cl("6, 7, 3, 4, -5, -9"));
+    s->add_clause_outer(str_to_cl("6, -7, -3, -4, 5, -9"));
+    s->add_clause_outer(str_to_cl("-6, 7, -3, -4, 5, -9"));
+    s->add_clause_outer(str_to_cl("-6, -7, 3, -4, 5, -9"));
+    s->add_clause_outer(str_to_cl("6, 7, 3, -4, 5, -9"));
+    s->add_clause_outer(str_to_cl("-6, -7, -3, 4, 5, -9"));
+    s->add_clause_outer(str_to_cl("6, 7, -3, 4, 5, -9"));
+    s->add_clause_outer(str_to_cl("6, -7, 3, 4, 5, -9"));
+    s->add_clause_outer(str_to_cl("-6, 7, 3, 4, 5, -9"));
+    s->add_clause_outer(str_to_cl("6, -7, -3, -4, -5, 9"));
+    s->add_clause_outer(str_to_cl("-6, 7, -3, -4, -5, 9"));
+    s->add_clause_outer(str_to_cl("-6, -7, 3, -4, -5, 9"));
+    s->add_clause_outer(str_to_cl("6, 7, 3, -4, -5, 9"));
+    s->add_clause_outer(str_to_cl("-6, -7, -3, 4, -5, 9"));
+    s->add_clause_outer(str_to_cl("6, 7, -3, 4, -5, 9"));
+    s->add_clause_outer(str_to_cl("6, -7, 3, 4, -5, 9"));
+    s->add_clause_outer(str_to_cl("-6, 7, 3, 4, -5, 9"));
+    s->add_clause_outer(str_to_cl("-6, -7, -3, -4, 5, 9"));
+    s->add_clause_outer(str_to_cl("6, 7, -3, -4, 5, 9"));
+    s->add_clause_outer(str_to_cl("6, -7, 3, -4, 5, 9"));
+    s->add_clause_outer(str_to_cl("-6, 7, 3, -4, 5, 9"));
+    s->add_clause_outer(str_to_cl("6, -7, -3, 4, 5, 9"));
+    s->add_clause_outer(str_to_cl("-6, 7, -3, 4, 5, 9"));
+    s->add_clause_outer(str_to_cl("-6, -7, 3, 4, 5, 9"));
+    s->add_clause_outer(str_to_cl("6, 7, 3, 4, 5, 9"));
+
+    occsimp->setup();
+    XorFinder finder(occsimp, s);
+    finder.find_xors();
+    check_xors_eq(finder.xors, "6, 7, 3, 4, 5, 9 = 1;");
+}
+
 
 TEST_F(xor_finder, clean_v1)
 {
     XorFinder finder(occsimp, s);
     finder.xors = str_to_xors("1, 2, 3 = 0;");
     finder.clean_up_xors();
-    EXPECT_EQ(finder.xors.size(), 0);
+    EXPECT_EQ(finder.xors.size(), 0u);
 }
 
 TEST_F(xor_finder, clean_v2)
@@ -280,7 +369,7 @@ TEST_F(xor_finder, clean_v2)
     XorFinder finder(occsimp, s);
     finder.xors = str_to_xors("1, 2, 3 = 0; 1, 4, 5, 6 = 0");
     finder.clean_up_xors();
-    EXPECT_EQ(finder.xors.size(), 2);
+    EXPECT_EQ(finder.xors.size(), 2u);
 }
 
 TEST_F(xor_finder, clean_v3)
@@ -288,7 +377,7 @@ TEST_F(xor_finder, clean_v3)
     XorFinder finder(occsimp, s);
     finder.xors = str_to_xors("1, 2, 3 = 0; 1, 4, 5, 6 = 0; 10, 11, 12, 13 = 1");
     finder.clean_up_xors();
-    EXPECT_EQ(finder.xors.size(), 2);
+    EXPECT_EQ(finder.xors.size(), 2u);
 }
 
 TEST_F(xor_finder, clean_v4)
@@ -296,7 +385,7 @@ TEST_F(xor_finder, clean_v4)
     XorFinder finder(occsimp, s);
     finder.xors = str_to_xors("1, 2, 3 = 0; 1, 4, 5, 6 = 0; 10, 11, 12, 13 = 1; 10, 15, 16, 17 = 0");
     finder.clean_up_xors();
-    EXPECT_EQ(finder.xors.size(), 4);
+    EXPECT_EQ(finder.xors.size(), 4u);
 }
 
 TEST_F(xor_finder, xor_1)
@@ -329,7 +418,7 @@ TEST_F(xor_finder, xor_4)
     finder.xors = str_to_xors("1, 2, 3 = 0; 1, 4, 5, 6 = 0;"
         "1, 9, 10, 11 = 0;");
     finder.xor_together_xors();
-    EXPECT_EQ(finder.xors.size(), 3);
+    EXPECT_EQ(finder.xors.size(), 3u);
 }
 
 TEST_F(xor_finder, xor_5)
@@ -338,7 +427,7 @@ TEST_F(xor_finder, xor_5)
     finder.xors = str_to_xors("1, 2, 3 = 0; 1, 4, 5, 6 = 0;"
         "1, 4, 10, 11 = 0;");
     finder.xor_together_xors();
-    EXPECT_EQ(finder.xors.size(), 2);
+    EXPECT_EQ(finder.xors.size(), 2u);
     check_xors_contains(finder.xors, "5, 6, 10, 11 = 0");
 }
 
@@ -348,7 +437,7 @@ TEST_F(xor_finder, xor_6)
     finder.xors = str_to_xors("1, 2 = 0; 1, 4= 0;"
         "6, 7 = 0; 6, 10 = 1");
     finder.xor_together_xors();
-    EXPECT_EQ(finder.xors.size(), 2);
+    EXPECT_EQ(finder.xors.size(), 2u);
     check_xors_eq(finder.xors, "2, 4 = 0; 7, 10 = 1");
 }
 
@@ -357,7 +446,7 @@ TEST_F(xor_finder, xor_7)
     XorFinder finder(occsimp, s);
     finder.xors = str_to_xors("1, 2 = 0; 1, 2= 0;");
     finder.xor_together_xors();
-    EXPECT_EQ(finder.xors.size(), 0);
+    EXPECT_EQ(finder.xors.size(), 0u);
 }
 
 TEST_F(xor_finder, xor_8)
@@ -376,7 +465,7 @@ TEST_F(xor_finder, xor_unit)
     finder.xor_together_xors();
     bool ret = finder.add_new_truths_from_xors();
     EXPECT_TRUE(ret);
-    EXPECT_EQ(finder.xors.size(), 0);
+    EXPECT_EQ(finder.xors.size(), 0u);
 }
 
 TEST_F(xor_finder, xor_unit2)
@@ -396,7 +485,7 @@ TEST_F(xor_finder, xor_binx)
     finder.xor_together_xors();
     bool ret = finder.add_new_truths_from_xors();
     EXPECT_TRUE(ret);
-    EXPECT_EQ(finder.xors.size(), 0);
+    EXPECT_EQ(finder.xors.size(), 0u);
     check_red_cls_eq(s, "5, -3; -5, 3");
 }
 
@@ -407,7 +496,7 @@ TEST_F(xor_finder, xor_binx_inv)
     finder.xor_together_xors();
     bool ret = finder.add_new_truths_from_xors();
     EXPECT_TRUE(ret);
-    EXPECT_EQ(finder.xors.size(), 0);
+    EXPECT_EQ(finder.xors.size(), 0u);
     check_red_cls_eq(s, "-5, -3; 5, 3");
 }
 
@@ -418,7 +507,7 @@ TEST_F(xor_finder, xor_binx_inv2)
     finder.xor_together_xors();
     bool ret = finder.add_new_truths_from_xors();
     EXPECT_TRUE(ret);
-    EXPECT_EQ(finder.xors.size(), 0);
+    EXPECT_EQ(finder.xors.size(), 0u);
     check_red_cls_eq(s, "5, -3; -5, 3");
 }
 
@@ -429,7 +518,7 @@ TEST_F(xor_finder, xor_binx2_recur)
     finder.xor_together_xors();
     bool ret = finder.add_new_truths_from_xors();
     EXPECT_TRUE(ret);
-    EXPECT_EQ(finder.xors.size(), 0);
+    EXPECT_EQ(finder.xors.size(), 0u);
     check_red_cls_eq(s, "5, -3; -5, 3");
 }
 
@@ -443,7 +532,7 @@ TEST_F(xor_finder, xor_binx3_recur)
     finder.xor_together_xors();
     ret = finder.add_new_truths_from_xors();
     EXPECT_TRUE(ret);
-    EXPECT_EQ(finder.xors.size(), 0);
+    EXPECT_EQ(finder.xors.size(), 0u);
     check_red_cls_eq(s, "5, -3; -5, 3");
 }
 

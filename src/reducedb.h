@@ -1,24 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
 
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifndef __REDUCEDB_H__
 #define __REDUCEDB_H__
@@ -37,26 +37,21 @@ public:
     ReduceDB(Solver* solver);
     void reduce_db_and_update_reset_stats();
     const CleaningStats& get_stats() const;
+    void handle_lev1();
 
     uint64_t get_nbReduceDB() const
     {
         return nbReduceDB;
     }
+    uint64_t nbReduceDB = 0;
 
 private:
     Solver* solver;
-    uint64_t nbReduceDB = 0;
     vector<ClOffset> delayed_clause_free;
     CleaningStats cleaningStats;
 
-    vector<ClOffset> never_cleaned;
-    void move_to_never_cleaned();
-    void move_from_never_cleaned();
-
-    unsigned cl_locked;
     unsigned cl_marked;
     unsigned cl_ttl;
-    unsigned cl_glue;
     unsigned cl_locked_solver;
 
     size_t last_reducedb_num_conflicts = 0;
@@ -64,13 +59,9 @@ private:
     void clear_clauses_stats(vector<ClOffset>& clauseset);
 
     bool cl_needs_removal(const Clause* cl, const ClOffset offset) const;
-    void remove_cl_from_array_and_count_stats(
-        CleaningStats& tmpStats
-        , uint64_t sumConflicts
-    );
+    void remove_cl_from_array_and_count_stats(CleaningStats& tmpStats);
 
     CleaningStats reduceDB();
-    void lock_most_UIP_used_clauses();
 
     void sort_red_cls(ClauseClean clean_type);
     void mark_top_N_clauses(const uint64_t keep_num);

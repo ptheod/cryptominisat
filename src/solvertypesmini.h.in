@@ -1,5 +1,5 @@
 /******************************************
-Copyright (c) 2014, Mate Soos
+Copyright (c) 2016, Mate Soos
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -43,7 +43,7 @@ class Lit
 public:
     Lit() : x(var_Undef<<1) {}   // (lit_Undef)
     explicit Lit(uint32_t var, bool is_inverted) :
-        x((var<<1) | (uint32_t)is_inverted)
+        x(var + var + is_inverted)
     {}
 
     const uint32_t& toInt() const { // Guarantees small, positive integers suitable for array indexing.
@@ -151,6 +151,8 @@ public:
         uint8_t v   = (0xFCFCF400 >> sel) & 3;
         return lbool(v);
     }
+
+    uint8_t getValue() const { return value; }
 
     friend int   toInt  (lbool l);
     friend lbool toLbool(int   v);

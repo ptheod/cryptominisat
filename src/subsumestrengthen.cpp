@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "subsumestrengthen.h"
 #include "occsimplifier.h"
@@ -243,7 +244,7 @@ void SubsumeStrengthen::backward_subsumption_long_with_long()
     const double time_used = cpuTime() - myTime;
     const bool time_out = (*simplifier->limit_to_decrease <= 0);
     const double time_remain = float_div(*simplifier->limit_to_decrease, orig_limit);
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout
         << "c [sub] rem cl: " << subsumed
         << " tried: " << wenThrough << "/" << simplifier->clauses.size()
@@ -309,7 +310,7 @@ bool SubsumeStrengthen::backward_strengthen_long_with_long()
     const bool time_out = *simplifier->limit_to_decrease <= 0;
     const double time_remain = float_div(*simplifier->limit_to_decrease, orig_limit);
 
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout
         << "c [str] sub: " << ret.sub
         << " str: " << ret.str
@@ -355,8 +356,7 @@ void inline SubsumeStrengthen::fillSubs(
     Lit litSub;
     watch_subarray_const cs = solver->watches[lit];
     *simplifier->limit_to_decrease -= (long)cs.size()*2+ 40;
-    for (watch_subarray_const::const_iterator
-        it = cs.begin(), end = cs.end()
+    for (const Watched *it = cs.begin(), *end = cs.end()
         ; it != end
         ; ++it
     ) {
@@ -478,7 +478,7 @@ bool SubsumeStrengthen::handle_sub_str_with(size_t orig_limit)
     const bool time_out =  limit_to_handle_sub_str_with <= 0;
     const double time_used = cpuTime() - start_time;
     const double time_remain = float_div(limit_to_handle_sub_str_with, orig_limit);
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout
         << "c [occ-substr] sub_str_with"
         << " sub: " << stat.sub
@@ -681,11 +681,10 @@ template<class T> void SubsumeStrengthen::find_subsumed(
     watch_subarray occ = solver->watches[ps[smallest]];
     *simplifier->limit_to_decrease -= (long)occ.size()*8 + 40;
 
-    watch_subarray::iterator it = occ.begin();
-    watch_subarray::iterator it2 = occ.begin();
+    Watched* it = occ.begin();
+    Watched* it2 = occ.begin();
     size_t numBinFound = 0;
-    for (watch_subarray::const_iterator
-        end = occ.end()
+    for (const Watched* end = occ.end()
         ; it != end
         ; ++it
     ) {
@@ -707,29 +706,6 @@ template<class T> void SubsumeStrengthen::find_subsumed(
                     solver->binTri.irredBins--;
                     continue;
                 }
-            }
-
-            if (it->isTri()
-                && ps.size() == 2
-                && (ps[!smallest] == it->lit2() || ps[!smallest] == it->lit3())
-            ) {
-                /*cout
-                << "ps " << ps << " could subsume this tri: "
-                << ps[smallest] << ", " << it->lit2() << ", " << it->lit3()
-                << endl;
-                */
-                Lit lits[3];
-                lits[0] = ps[smallest];
-                lits[1] = it->lit2();
-                lits[2] = it->lit3();
-                std::sort(lits + 0, lits + 3);
-                removeTriAllButOne(solver->watches, ps[smallest], lits, it->red());
-                if (it->red()) {
-                    solver->binTri.redTris--;
-                } else {
-                    solver->binTri.irredTris--;
-                }
-                continue;
             }
         }
         *it2++ = *it;
@@ -880,7 +856,7 @@ SubsumeStrengthen::Sub1Ret SubsumeStrengthen::sub_str_with_implicit(
     return ret;
 }
 
-bool SubsumeStrengthen::backw_sub_str_with_bin_tris_watch(
+bool SubsumeStrengthen::backw_sub_str_with_bins_watch(
     const Lit lit
     , const bool redundant_too
 ) {
@@ -923,39 +899,6 @@ bool SubsumeStrengthen::backw_sub_str_with_bin_tris_watch(
             continue;
         }
 
-        //Each TRI only once
-        if (ws[i].isTri()
-            && (redundant_too ||
-             (lit < ws[i].lit2() && ws[i].lit2() < ws[i].lit3())
-            )
-        ) {
-            const bool red = ws[i].red();
-            tried_bin_tri++;
-            tmpLits.resize(3);
-            tmpLits[0] = lit;
-            tmpLits[1] = ws[i].lit2();
-            tmpLits[2] = ws[i].lit3();
-            std::sort(tmpLits.begin(), tmpLits.end());
-
-            Sub1Ret ret = sub_str_with_implicit(tmpLits);
-            subsumedTri += ret.sub;
-            strTri += ret.str;
-            if (!solver->ok)
-                return false;
-
-            if (red
-                && ret.subsumedIrred
-            ) {
-                //ws[i].setRed(false);
-                solver->binTri.redTris--;
-                solver->binTri.irredTris++;
-                findWatchedOfTri(solver->watches, tmpLits[0], tmpLits[1], tmpLits[2], true).setRed(false);
-                findWatchedOfTri(solver->watches, tmpLits[1], tmpLits[0], tmpLits[2], true).setRed(false);
-                findWatchedOfTri(solver->watches, tmpLits[2], tmpLits[0], tmpLits[1], true).setRed(false);
-            }
-            continue;
-        }
-
         //Must be a longer clause, break
         //assert(ws[i].isClause());
         //break;
@@ -964,7 +907,7 @@ bool SubsumeStrengthen::backw_sub_str_with_bin_tris_watch(
     return true;
 }
 
-bool SubsumeStrengthen::backward_sub_str_with_bins_tris()
+bool SubsumeStrengthen::backward_sub_str_with_bins()
 {
     size_t strSucceed = 0;
 
@@ -990,7 +933,7 @@ bool SubsumeStrengthen::backward_sub_str_with_bins_tris()
 
     ) {
         Lit lit = Lit::toLit(upI);
-        if (!backw_sub_str_with_bin_tris_watch(lit)) {
+        if (!backw_sub_str_with_bins_watch(lit)) {
             break;
         }
     }
@@ -998,7 +941,7 @@ bool SubsumeStrengthen::backward_sub_str_with_bins_tris()
     const double time_used = cpuTime() - myTime;
     const bool time_out = *simplifier->limit_to_decrease <= 0;
     const double time_remain = float_div(*simplifier->limit_to_decrease, orig_time_limit);
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout
         << "c [sub] tri"
         << " upI: " << upI

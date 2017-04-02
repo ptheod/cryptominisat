@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "implcache.h"
 
@@ -161,7 +162,7 @@ bool ImplCache::clean(Solver* solver, bool* setSomething)
     }
 
     vector<uint16_t>& inside = solver->seen;
-    vector<uint16_t>& irred = solver->seen2;
+    vector<uint8_t>& irred = solver->seen2;
     size_t wsLit = 0;
     for(vector<TransCache>::iterator
         trans = implCache.begin(), transEnd = implCache.end()
@@ -252,7 +253,7 @@ bool ImplCache::clean(Solver* solver, bool* setSomething)
     }
 
     const double time_used = cpuTime()-myTime;
-    if (solver->conf.verbosity >= 1) {
+    if (solver->conf.verbosity) {
         cout << "c [cache] cleaned."
         << " Updated: " << std::setw(7) << numUpdated/1000 << " K"
         << " Cleaned: " << std::setw(7) << numCleaned/1000 << " K"
@@ -272,7 +273,7 @@ bool ImplCache::clean(Solver* solver, bool* setSomething)
 }
 
 void ImplCache::handleNewData(
-    vector<uint16_t>& val
+    vector<uint8_t>& val
     , uint32_t var
     , Lit lit
 ) {
@@ -390,7 +391,7 @@ end:
     const double time_used = cpuTime() - myTime;
     runStats.zeroDepthAssigns = solver->trail_size() - origTrailSize;
     runStats.cpu_time = time_used;
-    if (solver->conf.verbosity >= 1) {
+    if (solver->conf.verbosity) {
         runStats.print_short(solver);
     }
     globalStats += runStats;
@@ -415,7 +416,7 @@ void ImplCache::tryVar(
 
     //Convenience
     vector<uint16_t>& seen = solver->seen;
-    vector<uint16_t>& val = solver->seen2;
+    vector<uint8_t>& val = solver->seen2;
 
     Lit lit = Lit(var, false);
 
@@ -443,8 +444,7 @@ void ImplCache::tryVar(
     }
 
     //Fill 'seen' and 'val' from watch
-    for (watch_subarray::const_iterator
-        it = ws1.begin(), end = ws1.end()
+    for (const Watched *it = ws1.begin(), *end = ws1.end()
         ; it != end
         ; ++it
     ) {
@@ -487,7 +487,7 @@ void ImplCache::tryVar(
 
     //Try to see if we propagate the same or opposite from the other end
     //Using binary clauses
-    for (watch_subarray::const_iterator it = ws2.begin(), end = ws2.end(); it != end; ++it) {
+    for (const Watched *it = ws2.begin(), *end = ws2.end(); it != end; ++it) {
         if (!it->isBin())
             continue;
 
@@ -508,7 +508,7 @@ void ImplCache::tryVar(
         val[it->getLit().var()] = false;
     }
 
-    for (watch_subarray::const_iterator it = ws1.begin(), end = ws1.end(); it != end; ++it) {
+    for (const Watched *it = ws1.begin(), *end = ws1.end(); it != end; ++it) {
         if (!it->isBin())
             continue;
 

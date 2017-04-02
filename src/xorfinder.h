@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
- */
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifndef _XORFINDER_H_
 #define _XORFINDER_H_
@@ -168,11 +169,10 @@ public:
 private:
     PossibleXor poss_xor;
     void add_found_xor(const Xor& found_xor);
-    void find_xors_based_on_short_clauses();
     void find_xors_based_on_long_clauses();
     void print_found_xors();
     bool xor_has_interesting_var(const Xor& x);
-    vector<uint32_t> xor_two(Xor& x1, Xor& x2, const size_t idx1, const size_t idx2);
+    vector<uint32_t> xor_two(Xor& x1, Xor& x2);
     void clean_xors_from_empty();
 
     int64_t xor_find_time_limit;
@@ -182,19 +182,6 @@ private:
 
     ///Normal finding of matching clause for XOR
     void findXorMatch(watch_subarray_const occ);
-    void findXorMatch(
-        watch_subarray_const occ
-        , const Lit lit
-    );
-    void findXorMatchExt(
-        watch_subarray_const occ
-        , const Lit lit
-    );
-    //TODO stamping finXorMatch with stamp
-    /*void findXorMatch(
-        const vector<LitExtra>& lits
-        , const Lit lit
-    ) const;*/
 
     OccSimplifier* occsimplifier;
     Solver *solver;
@@ -209,8 +196,8 @@ private:
 
     //Other temporaries
     vector<uint16_t>& seen;
-    vector<uint16_t>& seen2;
     vector<Lit>& toClear;
+    vector<uint32_t> interesting;
 };
 
 
@@ -290,10 +277,10 @@ template<class T> void PossibleXor::add(
     assert(cl.size() < size || rhs == thisRhs);
 
     //set to true every combination for the missing variables
-    for (uint32_t i = 0; i < 1UL<<(varsMissing.size()); i++) {
+    for (uint32_t j = 0; j < 1UL<<(varsMissing.size()); j++) {
         uint32_t thisWhichOne = whichOne;
         for (uint32_t i2 = 0; i2 < varsMissing.size(); i2++) {
-            if (bit(i, i2)) thisWhichOne+= 1<<(varsMissing[i2]);
+            if (bit(j, i2)) thisWhichOne+= 1<<(varsMissing[i2]);
         }
         foundComb[thisWhichOne] = true;
     }

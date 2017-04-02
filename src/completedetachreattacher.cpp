@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "completedetachreattacher.h"
 #include "solver.h"
@@ -56,12 +57,6 @@ void CompleteDetachReatacher::detach_nonbins_nontris()
 
     assert(stay.irredBins % 2 == 0);
     solver->binTri.irredBins = stay.irredBins/2;
-
-    assert(stay.redTris % 3 == 0);
-    solver->binTri.redTris = stay.redTris/3;
-
-    assert(stay.irredTris % 3 == 0);
-    solver->binTri.irredTris = stay.irredTris/3;
 }
 
 /**
@@ -72,21 +67,14 @@ CompleteDetachReatacher::ClausesStay CompleteDetachReatacher::clearWatchNotBinNo
 ) {
     ClausesStay stay;
 
-    watch_subarray::iterator i = ws.begin();
-    watch_subarray::iterator j = i;
-    for (watch_subarray::iterator end = ws.end(); i != end; i++) {
+    Watched* i = ws.begin();
+    Watched* j = i;
+    for (Watched* end = ws.end(); i != end; i++) {
         if (i->isBin()) {
             if (i->red())
                 stay.redBins++;
             else
                 stay.irredBins++;
-
-            *j++ = *i;
-        } else if (i->isTri()) {
-            if (i->red())
-                stay.redTris++;
-            else
-                stay.irredTris++;
 
             *j++ = *i;
         }
@@ -103,7 +91,9 @@ bool CompleteDetachReatacher::reattachLongs(bool removeStatsFirst)
     }
 
     cleanAndAttachClauses(solver->longIrredCls, removeStatsFirst);
-    cleanAndAttachClauses(solver->longRedCls, removeStatsFirst);
+    for(auto& lredcls: solver->longRedCls) {
+        cleanAndAttachClauses(lredcls, removeStatsFirst);
+    }
     solver->clauseCleaner->clean_implicit_clauses();
     assert(!solver->drat->something_delayed());
 
@@ -118,7 +108,9 @@ bool CompleteDetachReatacher::reattachLongs(bool removeStatsFirst)
 void CompleteDetachReatacher::reattachLongsNoClean()
 {
     attachClauses(solver->longIrredCls);
-    attachClauses(solver->longRedCls);
+    for(auto& lredcls: solver->longRedCls) {
+        attachClauses(lredcls);
+    }
 }
 
 void CompleteDetachReatacher::attachClauses(
@@ -181,13 +173,13 @@ bool CompleteDetachReatacher::clean_clause(Clause* cl)
 {
     Clause& ps = *cl;
     (*solver->drat) << deldelay << ps << fin;
-    if (ps.size() <= 3) {
+    if (ps.size() <= 2) {
         cout
         << "ERROR, clause is too small, and linked in: "
         << *cl
         << endl;
     }
-    assert(ps.size() > 3);
+    assert(ps.size() > 2);
 
     Lit *i = ps.begin();
     Lit *j = i;
@@ -223,11 +215,6 @@ bool CompleteDetachReatacher::clean_clause(Clause* cl)
 
         case 2: {
             solver->attach_bin_clause(ps[0], ps[1], ps.red());
-            return false;
-        }
-
-        case 3: {
-            solver->attach_tri_clause(ps[0], ps[1], ps[2], ps.red());
             return false;
         }
 

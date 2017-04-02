@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifndef __CNF_H__
 #define __CNF_H__
@@ -39,7 +40,6 @@
 #include "xor.h"
 
 namespace CMSat {
-using namespace CMSat;
 
 class ClauseAllocator;
 
@@ -47,8 +47,6 @@ struct BinTriStats
 {
     uint64_t irredBins = 0;
     uint64_t redBins = 0;
-    uint64_t irredTris = 0;
-    uint64_t redTris = 0;
     uint64_t numNewBinsSinceSCC = 0;
 };
 
@@ -77,6 +75,8 @@ public:
         drat = new Drat();
         assert(_must_interrupt_inter != NULL);
         must_interrupt_inter = _must_interrupt_inter;
+
+        longRedCls.resize(3);
     }
 
     virtual ~CNF()
@@ -90,17 +90,18 @@ public:
     bool ok = true;
     watch_array watches;  ///< 'watches[lit]' is a list of constraints watching 'lit'
     vector<VarData> varData;
+    bool VSIDS = true;
+    vector<uint32_t> depth;
     Stamp stamp;
     ImplCache implCache;
     uint32_t minNumVars = 0;
-    int64_t num_red_cls_reducedb = 0;
-    bool red_long_cls_is_reducedb(const Clause& cl) const;
-    int64_t count_num_red_cls_reducedb() const;
     Drat* drat;
+    uint32_t sumConflicts = 0;
+    unsigned  cur_max_temp_red_lev2_cls = conf.max_temp_lev2_learnt_clauses;
 
     //Clauses
     vector<ClOffset> longIrredCls;
-    vector<ClOffset> longRedCls;
+    vector<vector<ClOffset> > longRedCls;
     vector<Xor> xorclauses;
     BinTriStats binTri;
     LitStats litStats;
@@ -108,8 +109,10 @@ public:
 
     //Temporaries
     vector<uint16_t> seen;
-    vector<uint16_t> seen2;
+    vector<uint8_t> seen2;
+    vector<uint64_t> permDiff;
     vector<Lit>      toClear;
+    uint64_t MYFLAG = 1;
 
     bool okay() const
     {
@@ -149,7 +152,7 @@ public:
 
     bool clause_locked(const Clause& c, const ClOffset offset) const;
     void unmark_all_irred_clauses();
-    void unmark_all_red_clauses();
+    void unmark_all_red1_clauses();
 
     bool redundant(const Watched& ws) const;
     bool redundant_or_removed(const Watched& ws) const;
@@ -171,13 +174,6 @@ public:
         , Function func
         , int64_t* limit
     ) const;
-    void remove_tri_but_lit1(
-        const Lit lit1
-        , const Lit lit2
-        , const Lit lit3
-        , const bool red
-        , int64_t& timeAvailable
-    );
     uint32_t map_inter_to_outer(const uint32_t inter) const
     {
         return interToOuterMain[inter];
@@ -208,10 +204,14 @@ public:
         return nVarsOuter() - num_bva_vars;
     }
 
-    template<class T>
-    Lit map_to_with_bva(const T lit) const
+    Lit map_to_with_bva(const Lit lit) const
     {
         return Lit(outer_to_with_bva_map.at(lit.var()), lit.sign());
+    }
+
+    uint32_t map_to_with_bva(const uint32_t var) const
+    {
+        return outer_to_with_bva_map.at(var);
     }
 
     size_t nVars() const
@@ -242,7 +242,10 @@ public:
     void find_all_attach(const vector<ClOffset>& cs) const;
     bool find_clause(const ClOffset offset) const;
     void test_all_clause_attached() const;
+    void test_all_clause_attached(const vector<ClOffset>& offsets) const;
     void check_wrong_attach() const;
+    void check_watchlist(watch_subarray_const ws) const;
+    bool satisfied_cl(const Clause* cl) const;
     void print_all_clauses() const;
     uint64_t count_lits(
         const vector<ClOffset>& clause_array
@@ -292,13 +295,6 @@ void CNF::for_each_lit(
             func(cl.ws.lit2());
             break;
 
-        case CMSat::watch_tertiary_t:
-            *limit -= 3;
-            func(cl.lit);
-            func(cl.ws.lit2());
-            func(cl.ws.lit3());
-            break;
-
         case CMSat::watch_clause_t: {
             const Clause& clause = *cl_alloc.ptr(cl.ws.get_offset());
             *limit -= clause.size();
@@ -324,12 +320,6 @@ void CNF::for_each_lit_except_watched(
         case CMSat::watch_binary_t:
             *limit -= 1;
             func(cl.ws.lit2());
-            break;
-
-        case CMSat::watch_tertiary_t:
-            *limit -= 2;
-            func(cl.ws.lit2());
-            func(cl.ws.lit3());
             break;
 
         case CMSat::watch_clause_t: {
@@ -358,6 +348,24 @@ struct ClauseSizeSorter
     const ClauseAllocator& cl_alloc;
 };
 
+inline bool CNF::redundant(const Watched& ws) const
+{
+    return (   (ws.isBin() && ws.red())
+            || (ws.isClause() && cl_alloc.ptr(ws.get_offset())->red())
+    );
+}
+
+inline bool CNF::redundant_or_removed(const Watched& ws) const
+{
+    if (ws.isBin()) {
+        return ws.red();
+    }
+
+   assert(ws.isClause());
+   const Clause* cl = cl_alloc.ptr(ws.get_offset());
+   return cl->red() || cl->getRemoved();
+}
+
 inline void CNF::clean_occur_from_removed_clauses()
 {
     for(watch_subarray w: watches) {
@@ -382,10 +390,12 @@ inline bool CNF::no_marked_clauses() const
         }
     }
 
-    for(ClOffset offset: longRedCls) {
-        Clause* cl = cl_alloc.ptr(offset);
-        if (cl->stats.marked_clause) {
-            return false;
+    for(auto& lredcls: longRedCls) {
+        for(ClOffset offset: lredcls) {
+            Clause* cl = cl_alloc.ptr(offset);
+            if (cl->stats.marked_clause) {
+                return false;
+            }
         }
     }
 
@@ -403,9 +413,9 @@ inline void CNF::clean_occur_from_idx_types_only_smudged()
 inline void CNF::clean_occur_from_idx(const Lit lit)
 {
     watch_subarray ws = watches[lit];
-    watch_subarray::iterator i = ws.begin();
-    watch_subarray::iterator j = ws.begin();
-    for(watch_subarray::const_iterator end = ws.end(); i < end; i++) {
+    Watched* i = ws.begin();
+    Watched* j = ws.begin();
+    for(const Watched* end = ws.end(); i < end; i++) {
         if (!i->isIdx()) {
             *j++ = *i;
         }
@@ -448,9 +458,9 @@ inline void CNF::unmark_all_irred_clauses()
     }
 }
 
-inline void CNF::unmark_all_red_clauses()
+inline void CNF::unmark_all_red1_clauses()
 {
-    for(ClOffset offset: longRedCls) {
+    for(ClOffset offset: longRedCls[1]) {
         Clause* cl = cl_alloc.ptr(offset);
         cl->stats.marked_clause = false;
     }
@@ -486,32 +496,12 @@ inline vector<Lit> unsign_lits(const T& lits)
     return ret;
 }
 
-inline bool CNF::red_long_cls_is_reducedb(const Clause& cl) const
-{
-    assert(cl.red());
-    return cl.stats.glue > conf.glue_must_keep_clause_if_below_or_eq
-        && !cl.stats.locked
-        && cl.stats.ttl == 0;
-}
-
-inline int64_t CNF::count_num_red_cls_reducedb() const
-{
-    int64_t num = 0;
-    for(ClOffset offset: longRedCls) {
-         Clause& cl = *cl_alloc.ptr(offset);
-         if (red_long_cls_is_reducedb(cl)) {
-             num++;
-         }
-    }
-    return num;
-}
-
 inline void CNF::check_no_removed_or_freed_cl_in_watch() const
 {
-    for(const watch_subarray_const ws: watches) {
+    for(watch_subarray_const ws: watches) {
         for(const Watched& w: ws) {
             assert(!w.isIdx());
-            if (w.isBin() || w.isTri()) {
+            if (w.isBin()) {
                 continue;
             }
             assert(w.isClause());

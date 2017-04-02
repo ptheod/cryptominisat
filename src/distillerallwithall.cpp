@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "distillerallwithall.h"
 #include "clausecleaner.h"
@@ -55,119 +56,15 @@ bool DistillerAllWithAll::distill(uint32_t queueByBy)
         goto end;
     }
 
-    if (!distill_tri_irred_cls()) {
-        goto end;
-    }
-
 end:
     globalStats += runStats;
-    if (solver->conf.verbosity >= 1) {
+    if (solver->conf.verbosity) {
         if (solver->conf.verbosity >= 3)
             runStats.print(solver->nVars());
         else
             runStats.print_short(solver);
     }
     runStats.clear();
-
-    return solver->ok;
-}
-
-bool DistillerAllWithAll::distill_tri_irred_cls()
-{
-    if (solver->conf.verbosity >= 6) {
-        cout
-        << "c Doing distill for tri irred clauses"
-        << endl;
-    }
-
-    //solver->watches.size()-1 would overflow
-    if (solver->watches.size() == 0) {
-        return solver->ok;
-    }
-
-    uint64_t origShorten = runStats.numClShorten;
-    uint64_t origLitRem = runStats.numLitsRem;
-    const double myTime = cpuTime();
-    uint64_t maxNumProps =
-        2LL*1000LL*solver->conf.distill_time_limitM
-        *solver->conf.global_timeout_multiplier;
-    uint64_t oldBogoProps = solver->propStats.bogoProps;
-    size_t origTrailSize = solver->trail_size();
-
-    //Randomize start in the watchlist
-    size_t upI;
-    upI = solver->mtrand.randInt(solver->watches.size()-1);
-    size_t numDone = 0;
-    for (; numDone < solver->watches.size()
-        ; upI = (upI +1) % solver->watches.size(), numDone++
-
-    ) {
-        if (solver->propStats.bogoProps-oldBogoProps + extraTime > maxNumProps
-            || solver->must_interrupt_asap()
-        ) {
-            break;
-        }
-
-        const Lit lit = Lit::toLit(upI);
-        for (size_t i = 0; i < solver->watches[lit].size(); i++) {
-            if (solver->propStats.bogoProps-oldBogoProps + extraTime > maxNumProps) {
-                break;
-            }
-
-            Watched ws = solver->watches[lit][i];
-
-            //Only irred TRI and each TRI only once
-            if (ws.isTri()
-                && !ws.red()
-                && lit < ws.lit2()
-                && ws.lit2() < ws.lit3()
-            ) {
-                uselessLits.clear();
-                lits.resize(3);
-                lits[0] = lit;
-                lits[1] = ws.lit2();
-                lits[2] = ws.lit3();
-                try_distill_clause_and_return_new(
-                    CL_OFFSET_MAX
-                    , ws.red()
-                    , NULL
-                    , 2
-                );
-
-                //We could have modified the watchlist, better exit now
-                break;
-            }
-        }
-
-        if (!solver->okay()) {
-            break;
-        }
-    }
-
-    int64_t diff_bogoprops = (int64_t)solver->propStats.bogoProps-(int64_t)oldBogoProps;
-    const bool time_out =  diff_bogoprops + extraTime > maxNumProps;
-    const double time_used = cpuTime() - myTime;
-    const double time_remain = 1.0 - float_div(diff_bogoprops + extraTime, maxNumProps);
-    if (solver->conf.verbosity >= 3) {
-        cout
-        << "c [distill] tri irred"
-        << " shorten: " << runStats.numClShorten - origShorten
-        << " lit-rem: " << runStats.numLitsRem - origLitRem
-        << " 0-depth ass: " << solver->trail_size() - origTrailSize
-        << solver->conf.print_times(time_used, time_out, time_remain)
-        << endl;
-    }
-    if (solver->sqlStats) {
-        solver->sqlStats->time_passed(
-            solver
-            , "distill tri irred"
-            , time_used
-            , time_out
-            , time_remain
-        );
-    }
-
-    runStats.zeroDepthAssigns = solver->trail_size() - origTrailSize;
 
     return solver->ok;
 }
@@ -278,7 +175,7 @@ bool DistillerAllWithAll::distill_long_irred_cls(uint32_t queueByBy)
         runStats.checkedClauses++;
 
         //Sanity check
-        assert(cl.size() > 3);
+        assert(cl.size() > 2);
         assert(!cl.red());
 
         //Copy literals
@@ -314,7 +211,7 @@ bool DistillerAllWithAll::distill_long_irred_cls(uint32_t queueByBy)
 
     const double time_used = cpuTime() - myTime;
     const double time_remain = float_div(solver->propStats.bogoProps-oldBogoProps + extraTime, maxNumProps);
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout << "c [distill] longirred"
         << " tried: " << runStats.checkedClauses << "/" << solver->longIrredCls.size()
         << " cl-r:" << runStats.numClShorten- origClShorten
@@ -493,4 +390,12 @@ void DistillerAllWithAll::Stats::print(const size_t nVars) const
         , "% of vars"
     );
     cout << "c -------- DISTILL STATS END --------" << endl;
+}
+
+double DistillerAllWithAll::mem_used() const
+{
+    double mem_used = sizeof(DistillerAllWithAll);
+    mem_used += lits.size()*sizeof(Lit);
+    mem_used += uselessLits.size()*sizeof(Lit);
+    return mem_used;
 }

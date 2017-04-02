@@ -1,23 +1,25 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
+
 
 #include "prober.h"
 
@@ -71,7 +73,7 @@ void Prober::checkOTFRatio()
     }
     val++;*/
 
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout
         << "c [probe] Ratio of hyperbin/(bogo+hyperbin) is : "
         << std::setprecision(2) << ratio
@@ -89,7 +91,7 @@ void Prober::checkOTFRatio()
         && !solver->drat->enabled()
     ) {
         solver->conf.otfHyperbin = false;
-        if (solver->conf.verbosity >= 2) {
+        if (solver->conf.verbosity) {
             cout << "c [probe] no longer doing OTF hyper-bin&trans-red" << endl;
         }
         solver->needToAddBinClause.clear();
@@ -139,7 +141,7 @@ uint64_t Prober::calc_numpropstodo()
     }
 
     runStats.origNumFreeVars = num_active_vars;
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
     cout
         << "c [probe] lits : "
         << std::setprecision(2) << (double)(solver->litStats.redLits + solver->litStats.irredLits)/(1000.0*1000.0)
@@ -274,7 +276,7 @@ void Prober::check_if_must_disable_cache_update()
     //More than 50% of the time is spent updating the cache... that's a lot
     //Disable and free
     if (timeOnCache > 50.0 && solver->conf.doCache)  {
-        if (solver->conf.verbosity >= 2) {
+        if (solver->conf.verbosity) {
             cout
             << "c [probe] too much time spent on updating cache: "
             << std::fixed << std::setprecision(1) << timeOnCache
@@ -285,7 +287,7 @@ void Prober::check_if_must_disable_cache_update()
         solver->conf.doCache = false;
         solver->implCache.free();
     } else {
-        if (solver->conf.verbosity >= 2) {
+        if (solver->conf.verbosity) {
             cout
             << "c [probe] time spent updating cache during probing: "
             << std::fixed << std::setprecision(1) << timeOnCache
@@ -293,24 +295,6 @@ void Prober::check_if_must_disable_cache_update()
             << endl;
         }
     }
-}
-
-Lit Prober::update_lit_for_dominator(
-    Lit lit
-) {
-    if (solver->conf.doCache) {
-        if (solver->litReachable[lit.toInt()].lit != lit_Undef) {
-            const Lit betterlit = solver->litReachable[lit.toInt()].lit;
-            if (solver->value(betterlit.var()) == l_Undef
-                && solver->varData[betterlit.var()].removed == Removed::none
-            ) {
-                //Update lit
-                lit = betterlit;
-            }
-        }
-    }
-
-    return lit;
 }
 
 vector<uint32_t> Prober::randomize_possible_choices()
@@ -340,9 +324,10 @@ vector<uint32_t> Prober::randomize_possible_choices()
 
 bool Prober::probe(vector<uint32_t>* probe_order)
 {
+    assert(solver->ok);
+    assert(solver->qhead == solver->trail.size());
     assert(solver->decisionLevel() == 0);
     assert(solver->nVars() > 0);
-    solver->test_all_clause_attached();
 
     clean_clauses_before_probe();
     reset_stats_and_state();
@@ -396,7 +381,6 @@ bool Prober::probe(vector<uint32_t>* probe_order)
             continue;
         }
 
-        lit = update_lit_for_dominator(lit);
         runStats.numVarProbed++;
         extraTime += 20;
 
@@ -413,7 +397,7 @@ bool Prober::probe(vector<uint32_t>* probe_order)
 end:
 
     if (solver->conf.verbosity >= 10) {
-        cout << "c main loop for " << __PRETTY_FUNCTION__
+        cout << "c main loop for " << __func__
         << " finished: "
         << " must_interrupt? " << solver->must_interrupt_asap()
         << " limit_used? " << (limit_used() >= numPropsTodo)
@@ -435,7 +419,6 @@ end:
     check_if_must_disable_otf_hyperbin_and_tred(numPropsTodo);
     check_if_must_disable_cache_update();
 
-    solver->test_all_clause_attached();
     return solver->ok;
 }
 
@@ -455,7 +438,7 @@ void Prober::update_and_print_stats(const double myTime, const uint64_t numProps
     runStats.numCalls = 1;
     globalStats += runStats;
 
-    if (solver->conf.verbosity >= 1) {
+    if (solver->conf.verbosity) {
         if (solver->conf.verbosity >= 3)
             runStats.print(solver->nVars());
         else
@@ -591,7 +574,7 @@ bool Prober::check_timeout_due_to_hyperbin()
     if (solver->timedOutPropagateFull
         && !solver->drat->enabled()
     ) {
-        if (solver->conf.verbosity >= 2) {
+        if (solver->conf.verbosity) {
             cout
             << "c [probe] intra-propagation timout,"
             << " turning off OTF hyper-bin&trans-red"
@@ -631,7 +614,7 @@ bool Prober::try_this(const Lit lit, const bool first)
     runStats.numProbed++;
     solver->new_decision_level();
     solver->enqueue(lit);
-    solver->varData[lit.var()].depth = 0;
+    solver->depth[lit.var()] = 0;
     if (solver->conf.verbosity >= 6) {
         cout
         << "c Probing lit " << lit
@@ -688,7 +671,9 @@ bool Prober::try_this(const Lit lit, const bool first)
             << " Lit that got propagated to both values: " << failed << endl;
         }
         runStats.numFailed++;
+        #ifdef STATS_NEEDED
         runStats.conflStats.update(solver->lastConflictCausedBy);
+        #endif
         runStats.conflStats.numConflicts++;
 
         vector<Lit> lits;
@@ -743,7 +728,7 @@ bool Prober::propagate(Lit& failed)
         if (!confl.isNULL()) {
             uint32_t  glue;
             uint32_t  backtrack_level;
-            solver->analyze_conflict(
+            solver->analyze_conflict<true>(
                 confl
                 , backtrack_level  //return backtrack level here
                 , glue             //return glue here

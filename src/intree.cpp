@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "intree.h"
 #include "solver.h"
@@ -84,7 +85,7 @@ bool InTree::check_timeout_due_to_hyperbin()
     if (solver->timedOutPropagateFull
         && !solver->drat->enabled()
     ) {
-        if (solver->conf.verbosity >= 2) {
+        if (solver->conf.verbosity) {
             cout
             << "c [intree] intra-propagation timout,"
             << " turning off OTF hyper-bin&trans-red"
@@ -136,7 +137,7 @@ bool InTree::intree_probe()
         return false;
     }
     if (aborted) {
-        if (solver->conf.verbosity >= 2) {
+        if (solver->conf.verbosity) {
             cout
             << "c [intree] too expensive SCC + varreplace loop: aborting"
             << endl;
@@ -176,7 +177,7 @@ bool InTree::intree_probe()
     const double time_remain = float_div(bogoprops_remain, bogoprops_to_use);
     const bool time_out = (bogoprops_remain < 0);
 
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout << "c [intree] Set "
         << (orig_num_free_vars - solver->get_num_free_vars())
         << " vars"
@@ -270,7 +271,7 @@ void InTree::tree_look()
                 if (tmp.var_reason_changed != var_Undef) {
                     solver->varData[tmp.var_reason_changed].reason = tmp.orig_propby;
                     if (solver->conf.verbosity >= 10) {
-                        cout << "RESet reason for VAR " << tmp.var_reason_changed+1 << " to: " << tmp.orig_propby.lit2() << " red: " << (int)tmp.orig_propby.isRedStep() << endl;
+                        cout << "RESet reason for VAR " << tmp.var_reason_changed+1 << " to:  ????" << /*tmp.orig_propby.lit2() << */ " red: " << (int)tmp.orig_propby.isRedStep() << endl;
                     }
                 }
             }
@@ -348,7 +349,7 @@ bool InTree::handle_lit_popped_from_queue(const Lit lit, const Lit other_lit, co
             depth_failed.back() = 1;
             failed.push_back(~lit);
             if (solver->conf.verbosity >= 10) {
-                cout << "Failed :" << ~lit << " level: " << solver->decisionLevel() << endl;
+                cout << "(timeout?) Failed :" << ~lit << " level: " << solver->decisionLevel() << endl;
             }
         } else {
             hyperbin_added += solver->hyper_bin_res_all(false);
@@ -417,4 +418,17 @@ void InTree::enqueue(const Lit lit, const Lit other_lit, bool red_cl)
         }
     }
     queue.push_back(QueueElem(lit_Undef, lit_Undef, false));
+}
+
+
+double InTree::mem_used() const
+{
+    double mem = 0;
+    mem += sizeof(InTree);
+    mem += roots.size()*sizeof(Lit);
+    mem += failed.size()*sizeof(Lit);
+    mem += reset_reason_stack.size()*sizeof(ResetReason);
+    mem += queue.size()*sizeof(QueueElem);
+    mem += depth_failed.size()*sizeof(char);
+    return mem;
 }

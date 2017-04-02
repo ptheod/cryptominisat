@@ -36,14 +36,14 @@ using std::endl;
 #include "main_common.h"
 
 #include "solverconf.h"
-#include "cryptominisat4/cryptominisat.h"
+#include "cryptominisat5/cryptominisat.h"
 #include "dimacsparser.h"
 
 using namespace CMSat;
 std::ostream* dratf;
 
 #ifdef USE_ZLIB
-static size_t gz_read(void* buf, size_t num, size_t count, gzFile f)
+static int gz_read(void* buf, size_t num, size_t count, gzFile f)
 {
     return gzread(f, buf, num*count);
 }
@@ -68,12 +68,24 @@ void printVersionInfo()
     #endif
 }
 
-void drat_stuff(SolverConf& conf)
+
+void handle_drat_option(SolverConf& conf, const char* dratfilname)
 {
-    dratf = &std::cout;
+    std::ofstream* dratfTmp = new std::ofstream;
+    dratfTmp->open(dratfilname, std::ofstream::out);
+    if (!*dratfTmp) {
+        std::cerr
+        << "ERROR: Could not open DRAT file "
+        << dratfilname
+        << " for writing"
+        << endl;
+
+        std::exit(-1);
+    }
+    dratf = dratfTmp;
 
     if (!conf.otfHyperbin) {
-        if (conf.verbosity >= 2) {
+        if (conf.verbosity) {
             cout
             << "c OTF hyper-bin is needed for BProp in DRAT, turning it back"
             << endl;
@@ -82,7 +94,7 @@ void drat_stuff(SolverConf& conf)
     }
 
     if (conf.doFindXors) {
-        if (conf.verbosity >= 2) {
+        if (conf.verbosity) {
             cout
             << "c XOR manipulation is not supported in DRAT, turning it off"
             << endl;
@@ -91,7 +103,7 @@ void drat_stuff(SolverConf& conf)
     }
 
     if (conf.doRenumberVars) {
-        if (conf.verbosity >= 2) {
+        if (conf.verbosity) {
             cout
             << "c Variable renumbering is not supported during DRAT, turning it off"
             << endl;
@@ -100,7 +112,7 @@ void drat_stuff(SolverConf& conf)
     }
 
     if (conf.doCompHandler) {
-        if (conf.verbosity >= 2) {
+        if (conf.verbosity) {
             cout
             << "c Component finding & solving is not supported during DRAT, turning it off"
             << endl;
@@ -141,14 +153,7 @@ int main(int argc, char** argv)
     const char* value;
     for (i = j = 0; i < argc; i++){
         if ((value = hasPrefix(argv[i], "--drat="))){
-            long int drat = (int)strtol(value, NULL, 10);
-            if (drat == 0 && errno == EINVAL){
-                printf("ERROR! illegal drat level %s\n", value);
-                exit(0);
-            }
-            if (drat > 0) {
-                drat_stuff(conf);
-            }
+            handle_drat_option(conf, value);
         }else if ((value = hasPrefix(argv[i], "--verb="))){
             long int verbosity = (int)strtol(value, NULL, 10);
             if (verbosity == 0 && errno == EINVAL){
@@ -162,6 +167,13 @@ int main(int argc, char** argv)
                 printf("ERROR! illegal threads %s\n", value);
                 exit(0);
             }
+        }else if ((value = hasPrefix(argv[i], "--reconf="))){
+            long int reconf  = (int)strtol(value, NULL, 10);
+            if (reconf == 0 && errno == EINVAL){
+                printf("ERROR! illegal threads %s\n", value);
+                exit(0);
+            }
+            conf.reconfigure_val = reconf;
         }else if (strcmp(argv[i], "--zero-exit-status") == 0){
             zero_exit_status = true;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "-help") == 0 || strcmp(argv[i], "--help") == 0){
@@ -188,23 +200,25 @@ int main(int argc, char** argv)
     }
     solver->set_num_threads(num_threads);
 
-    if (conf.verbosity >= 1) {
+    if (conf.verbosity) {
         printVersionInfo();
     }
     double cpu_time = cpuTime();
 
     solver = &S;
     signal(SIGINT,SIGINT_handler);
+    #if !defined (_MSC_VER)
     signal(SIGHUP,SIGINT_handler);
+    #endif
 
     if (argc == 1) {
         printf("Reading from standard input... Use '-h' or '--help' for help.\n");
         #ifndef USE_ZLIB
         FILE* in = stdin;
-        DimacsParser<StreamBuffer<FILE*, fread_op_norm, fread> > parser(solver, "", conf.verbosity);
+        DimacsParser<StreamBuffer<FILE*, FN> > parser(solver, "", conf.verbosity);
         #else
-        gzFile in = gzdopen(fileno(stdin), "rb");
-        DimacsParser<StreamBuffer<gzFile, fread_op_zip, gz_read> > parser(solver, "", conf.verbosity);
+        gzFile in = gzdopen(0, "rb"); //opens stdin, which is 0
+        DimacsParser<StreamBuffer<gzFile, GZ> > parser(solver, "", conf.verbosity);
         #endif
 
         if (!parser.parse_DIMACS(in)) {
@@ -235,9 +249,9 @@ int main(int argc, char** argv)
         }
 
         #ifndef USE_ZLIB
-        DimacsParser<StreamBuffer<FILE*, fread_op_norm, fread> > parser(solver, "", conf.verbosity);
+        DimacsParser<StreamBuffer<FILE*, FN> > parser(solver, "", conf.verbosity);
         #else
-        DimacsParser<StreamBuffer<gzFile, fread_op_zip, gz_read> > parser(solver, "", conf.verbosity);
+        DimacsParser<StreamBuffer<gzFile, GZ> > parser(solver, "", conf.verbosity);
         #endif
 
         if (!parser.parse_DIMACS(in)) {
@@ -252,17 +266,24 @@ int main(int argc, char** argv)
     }
 
     double parse_time = cpuTime() - cpu_time;
-    if (conf.verbosity >= 1) {
+    if (conf.verbosity) {
         printf("c  Parsing time: %-12.2f s\n", parse_time);
     }
 
     lbool ret = S.solve();
-    if (conf.verbosity >= 1) {
+    if (conf.verbosity) {
         S.print_stats();
     }
     printf(ret == l_True ? "s SATISFIABLE\n" : "s UNSATISFIABLE\n");
     if (ret == l_True) {
         print_model(&std::cout, solver);
+    }
+
+    if (dratf) {
+        *dratf << std::flush;
+        if (dratf != &std::cout) {
+            delete dratf;
+        }
     }
 
     if (zero_exit_status)

@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifndef __CONSTANTS_H__
 #define __CONSTANTS_H__
@@ -40,13 +41,8 @@
 #endif //__GNUC__
 
 
-#if defined _WIN32 || defined __CYGWIN__
-    #ifdef __GNUC__
-        #define DLL_PUBLIC __attribute__ ((dllexport))
-    #else
-        #define DLL_PUBLIC __declspec(dllexport)
-    #endif
-    #define DLL_LOCAL
+#if defined _WIN32
+    #define DLL_PUBLIC __declspec(dllexport)
 #else
     #define DLL_PUBLIC __attribute__ ((visibility ("default")))
     #define DLL_LOCAL  __attribute__ ((visibility ("hidden")))
@@ -66,13 +62,33 @@
 #define VERBOSE_DEBUG_RECONSTRUCT
 #endif
 
+//Thanks to Axel Kemper for the definitions below
+#ifdef _MSC_VER
+#pragma warning(disable : 4244)  //  C4244 : 'Argument': Konvertierung von 'const uint64_t' in 'double', möglicher Datenverlust
+#pragma warning(disable : 4267)  //  C4267 : 'return': Konvertierung von 'size_t' nach 'uint32_t', Datenverlust möglich
+#pragma warning(disable : 4302)  //  C4302 : truncation
+#pragma warning(disable : 4311)  //  C4311 : pointer truncation
+#pragma warning(disable : 4800)  //  C4800 : 'const uint32_t' : Variable wird auf booleschen Wert('True' oder 'False') gesetzt(Auswirkungen auf Leistungsverhalten möglich)
+#pragma warning(disable : 4805)  //  C4805 : '==' : unsichere Kombination von Typ 'unsigned short' mit Typ 'bool' in einer Operation
+#endif
+
 
 ///////////////////
 // Silent Debug
 ///////////////////
 
 #ifndef NDEBUG
+//#define FAST_DEBUG
+#endif
+
+#ifdef SLOW_DEBUG
 #define FAST_DEBUG
+#define DEBUG_PROPAGATEFROM
+#define ENQUEUE_DEBUG
+#define DEBUG_ATTACH_MORE
+#define DEBUG_IMPLICIT_PAIRS_TRIPLETS
+#define DEBUG_IMPLICIT_STATS
+#define DEBUG_GAUSS
 #endif
 
 #ifdef FAST_DEBUG
@@ -81,15 +97,6 @@
 #define DEBUG_ATTACH
 #define DEBUG_REPLACER
 #define DEBUG_MARKED_CLAUSE
-#endif
-
-#ifdef SLOW_DEBUG
-#define DEBUG_PROPAGATEFROM
-#define ENQUEUE_DEBUG
-#define DEBUG_ATTACH_MORE
-#define DEBUG_IMPLICIT_PAIRS_TRIPLETS
-#define DEBUG_IMPLICIT_STATS
-#define DEBUG_GAUSS
 #endif
 
 //#define DEBUG_ATTACH_FULL

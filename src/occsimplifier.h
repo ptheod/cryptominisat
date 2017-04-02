@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifndef SIMPLIFIER_H
 #define SIMPLIFIER_H
@@ -52,7 +53,6 @@ using std::priority_queue;
 class ClauseCleaner;
 class SolutionExtender;
 class Solver;
-class GateFinder;
 class TopLevelGaussAbst;
 class SubsumeStrengthen;
 class BVA;
@@ -112,7 +112,6 @@ struct BVEStats
     uint64_t clauses_elimed_bin = 0;
     uint64_t clauses_elimed_sumsize = 0;
     uint64_t longRedClRemThroughElim = 0;
-    uint64_t triRedClRemThroughElim = 0;
     uint64_t binRedClRemThroughElim = 0;
     uint64_t numRedBinVarRemAdded = 0;
     uint64_t testedToElimVars = 0;
@@ -145,7 +144,6 @@ struct BVEStats
         << "c [occ-bve]"
         << " subs: "  << subsumedByVE
         << " red-bin rem: " << binRedClRemThroughElim
-        << " red-tri rem: " << triRedClRemThroughElim
         << " red-long rem: " << longRedClRemThroughElim
         << endl;
     }
@@ -179,9 +177,6 @@ struct BVEStats
 
         print_stats_line("c elim-bin-lt-cl"
             , binRedClRemThroughElim);
-
-        print_stats_line("c elim-tri-lt-cl"
-            , triRedClRemThroughElim);
 
         print_stats_line("c elim-long-lt-cl"
             , longRedClRemThroughElim);
@@ -273,7 +268,7 @@ public:
     void check_elimed_vars_are_unassigned() const;
     bool getAnythingHasBeenBlocked() const;
     void freeXorMem();
-    void save_state(SimpleOutFile& f) const;
+    void save_state(SimpleOutFile& f);
     void load_state(SimpleInFile& f);
     vector<ClOffset> sub_str_with;
     TouchListLit impl_sub_lits;
@@ -285,6 +280,7 @@ public:
         , bool only_set_is_removed = false
     );
     void free_clauses_to_free();
+    void cleanBlockedClausesIfDirty();
 
 private:
     friend class SubsumeStrengthen;
@@ -305,12 +301,11 @@ private:
     //Persistent data
     Solver*  solver;              ///<The solver this simplifier is connected to
     vector<uint16_t>& seen;
-    vector<uint16_t>& seen2;
+    vector<uint8_t>& seen2;
     vector<Lit>& toClear;
 
     //Temporaries
     vector<Lit>     dummy;       ///<Used by merge()
-    vector<Lit>     gate_lits_of_elim_cls;
 
     //Limits
     uint64_t clause_lits_added;
@@ -369,9 +364,7 @@ private:
             if (second.isClause())
                 return true;
 
-            //BIN is better than TRI
-            if (first.isBin() && second.isTri()) return true;
-
+            //Both are bin
             return false;
         }
     };
@@ -401,7 +394,9 @@ private:
     };
     void        order_vars_for_elim();
     Heap<VarOrderLt> velim_order;
-    size_t      rem_cls_from_watch_due_to_varelim(watch_subarray_const todo, const Lit lit);
+    size_t      rem_cls_from_watch_due_to_varelim(watch_subarray todo, const Lit lit);
+    vector<Lit> tmp_rem_lits;
+    vec<Watched> tmp_rem_cls_copy;
     void        add_clause_to_blck(const Lit lit, const vector<Lit>& lits);
     void        set_var_as_eliminated(const uint32_t var, const Lit lit);
     bool        can_eliminate_var(const uint32_t var) const;
@@ -413,18 +408,9 @@ private:
     void        create_dummy_blocked_clause(const Lit lit);
     int         test_elim_and_fill_resolvents(uint32_t var);
     void        mark_gate_in_poss_negs(Lit elim_lit, watch_subarray_const poss, watch_subarray_const negs);
-    void        mark_gate_parts(
-        Lit elim_lit
-        , watch_subarray_const a
-        , watch_subarray_const b
-        , vector<char>& a_mark
-        , vector<char>& b_mark
-    );
-    bool        find_gate(Lit elim_lit, watch_subarray_const a, watch_subarray_const b);
-    bool        skip_resolution_thanks_to_gate(const size_t at_poss, const size_t at_negs) const;
+    void        find_gate(Lit elim_lit, watch_subarray_const a, watch_subarray_const b);
     void        print_var_eliminate_stat(Lit lit) const;
     bool        add_varelim_resolvent(vector<Lit>& finalLits, const ClauseStats& stats);
-    bool        check_if_new_2_long_subsumes_3_long_return_already_inside(const vector<Lit>& lits);
     void        update_varelim_complexity_heap(const uint32_t var);
     void        print_var_elim_complexity_stats(const uint32_t var) const;
     struct Resolvent {
@@ -440,15 +426,12 @@ private:
         }
     };
     vector<Resolvent> resolvents;
-    vector<char> poss_gate_parts;
-    vector<char> negs_gate_parts;
-    bool gate_found_elim;
+    Clause* gate_varelim_clause;
 
     struct HeuristicData
     {
         HeuristicData() :
             bin(0)
-            , tri(0)
             , longer(0)
             , lit(0)
             , count(std::numeric_limits<uint32_t>::max())
@@ -456,11 +439,10 @@ private:
 
         uint32_t totalCls() const
         {
-            return bin + tri + longer;
+            return bin + longer;
         }
 
         uint32_t bin;
-        uint32_t tri;
         uint32_t longer;
         uint32_t lit;
         uint32_t count; //resolution count (if can be counted, otherwise MAX)
@@ -514,9 +496,9 @@ private:
     /////////////////////
     //Helpers
     friend class TopLevelGaussAbst;
-    friend class GateFinder;
+    //friend class GateFinder;
     TopLevelGaussAbst *topLevelGauss;
-    GateFinder *gateFinder;
+    //GateFinder *gateFinder;
 
     /////////////////////
     //Blocked clause elimination
@@ -526,6 +508,7 @@ private:
     bool blockedMapBuilt;
     void buildBlockedMap();
     void cleanBlockedClauses();
+    bool can_remove_blocked_clauses = false;
 
     //validity checking
     void sanityCheckElimedVars();

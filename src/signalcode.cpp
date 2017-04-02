@@ -22,8 +22,10 @@ THE SOFTWARE.
 */
 
 #include "signalcode.h"
+#include "cryptominisat5/cryptominisat.h"
+#if !defined (_MSC_VER)
 #include <unistd.h>
-#include "cryptominisat4/cryptominisat.h"
+#endif
 
 
 using namespace CMSat;
@@ -49,7 +51,7 @@ void SIGINT_handler(int)
         << endl;
     } else {
         if (solver->nVars() > 0) {
-            //if (conf.verbosity >= 1) {
+            //if (conf.verbosity) {
                 solver->add_in_partial_solving_stats();
                 solver->print_stats();
             //}
@@ -58,6 +60,10 @@ void SIGINT_handler(int)
             << "No clauses or variables were put into the solver, exiting without stats"
             << endl;
         }
+        #if defined (_MSC_VER)
+        exit(1);
+        #else
         _exit(1);
+        #endif
     }
 }

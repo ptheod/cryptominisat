@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
- */
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "xorfinder.h"
 #include "time_mem.h"
@@ -36,7 +37,6 @@ XorFinder::XorFinder(OccSimplifier* _occsimplifier, Solver* _solver) :
     occsimplifier(_occsimplifier)
     , solver(_solver)
     , seen(_solver->seen)
-    , seen2(_solver->seen2)
     , toClear(_solver->toClear)
 {
 }
@@ -65,62 +65,26 @@ void XorFinder::find_xors_based_on_long_clauses()
         }
 
         //If not tried already, find an XOR with it
-        if (!cl->stats.marked_clause) {
+        if (!cl->stats.marked_clause ) {
             cl->stats.marked_clause = true;
+            assert(!cl->getRemoved());
+
+            const size_t needed_per_ws = 1ULL << (cl->size()-2);
+            for(const Lit lit: *cl) {
+                if (solver->watches[lit].size() < needed_per_ws) {
+                    goto next;
+                }
+                if (solver->watches[~lit].size() < needed_per_ws) {
+                    goto next;
+                }
+            }
 
             lits.resize(cl->size());
             std::copy(cl->begin(), cl->end(), lits.begin());
 
             //TODO check if already inside in some clever way
             findXor(lits, offset, cl->abst);
-        }
-    }
-}
-
-void XorFinder::find_xors_based_on_short_clauses()
-{
-    assert(solver->ok);
-
-    vector<Lit> lits;
-    for (size_t wsLit = 0, end = 2*solver->nVars()
-        ; wsLit < end && xor_find_time_limit > 0
-        ; wsLit++
-    ) {
-        const Lit lit = Lit::toLit(wsLit);
-        assert(solver->watches.size() > wsLit);
-        watch_subarray_const ws = solver->watches[lit];
-
-        xor_find_time_limit -= (int64_t)ws.size()*4;
-
-        //cannot use iterators because findXor may update the watchlist
-        for (size_t i = 0, size = solver->watches[lit].size()
-            ; i < size && xor_find_time_limit > 0
-            ; i++
-        ) {
-            const Watched& w = ws[i];
-
-            //Only care about tertiaries
-            if (!w.isTri())
-                continue;
-
-
-            if (//Only bother about each tri-clause once
-                lit < w.lit2()
-                && w.lit2() < w.lit3()
-                //If there is an tri XOR = 1 or XOR = 0, there is ALWAYS
-                //a 3-clause with -1 -2 X in there. Take that only
-                && lit.sign()
-                && w.lit2().sign()
-            ) {
-
-                lits.resize(3);
-                lits[0] = lit;
-                lits[1] = w.lit2();
-                lits[2] = w.lit3();
-
-                //TODO check if already inside in some clever way
-                findXor(lits, CL_OFFSET_MAX, calcAbstraction(lits));
-            }
+            next:;
         }
     }
 }
@@ -143,7 +107,6 @@ void XorFinder::find_xors()
     assert(solver->no_marked_clauses());
     #endif
 
-    find_xors_based_on_short_clauses();
     find_xors_based_on_long_clauses();
 
     //Cleanup
@@ -161,7 +124,7 @@ void XorFinder::find_xors()
     solver->sumSearchStats.num_xors_found_last = xors.size();
     print_found_xors();
 
-    if (solver->conf.verbosity >= 1) {
+    if (solver->conf.verbosity) {
         runStats.print_short(solver);
     }
     globalStats += runStats;
@@ -194,8 +157,17 @@ void XorFinder::print_found_xors()
 void XorFinder::add_xors_to_gauss()
 {
     solver->xorclauses = xors;
+    #ifdef SLOW_DEBUG
+    for(const Xor& x: xors) {
+        for(uint32_t v: x) {
+            assert(solver->varData[v].removed == Removed::none);
+        }
+    }
+    #endif
+
     for(ClOffset offs: cls_of_xors) {
         Clause* cl = solver->cl_alloc.ptr(offs);
+        assert(!cl->getRemoved());
         cl->set_used_in_xor(true);
     }
 }
@@ -206,28 +178,28 @@ void XorFinder::findXor(vector<Lit>& lits, const ClOffset offset, cl_abst_type a
     xor_find_time_limit -= 50;
     poss_xor.setup(lits, offset, abst, seen);
 
-    bool found_all = false;
-    //To be honest, -1 would do the trick fully. Or even just "i < 1", but
-    //that might not find all possibilities when shorter ones are allowed for
-    for (size_t i = 0; i < lits.size()-2; i++) {
-        const Lit lit = lits[i];
-        findXorMatch(solver->watches[lit], lit);
-        findXorMatch(solver->watches[~lit], ~lit);
-
-        //More expensive
-        //findXorMatchExt(solver->watches[lit], lit);
-        //findXorMatchExt(solver->watches[~lit], ~lit);
-
-        xor_find_time_limit -= 20;
-        if (poss_xor.foundAll()) {
-            found_all = true;
-            break;
+    Lit slit = lit_Undef;
+    size_t snum = std::numeric_limits<size_t>::max();
+    for (const Lit lit: lits) {
+        size_t num = solver->watches[lit].size() + solver->watches[~lit].size();
+        if (snum > num) {
+            snum = num;
+            slit = lit;
         }
     }
 
-    if (found_all) {
+    xor_find_time_limit -= 20;
+    findXorMatch(solver->watches[slit]);
+    findXorMatch(solver->watches[~slit]);
+
+    if (poss_xor.foundAll()) {
         std::sort(lits.begin(), lits.end());
         Xor found_xor(lits, poss_xor.getRHS());
+        #ifdef SLOW_DEBUG
+        for(Lit lit: lits) {
+            assert(solver->varData[lit.var()].removed == Removed::none);
+        }
+        #endif
 
         //TODO check if already inside in some clever way
         add_found_xor(found_xor);
@@ -249,161 +221,29 @@ void XorFinder::add_found_xor(const Xor& found_xor)
     runStats.sumSizeXors += found_xor.size();
 }
 
-void XorFinder::findXorMatchExt(
-    watch_subarray_const occ
-    , Lit lit
-) {
-    //seen2 is clear
-
-    for (watch_subarray::const_iterator
-        it = occ.begin(), end = occ.end()
-        ; it != end
-        ; ++it
-    ) {
-        //TODO we should do the same as below for teritary
-        if (!it->isClause()) {
-            continue;
-        }
-
-        assert(it->isClause() && "This algo has not been updated to deal with TRI, sorry");
-
-        //Deal with clause
-        const ClOffset offset = it->get_offset();
-        Clause& cl = *solver->cl_alloc.ptr(offset);
-        if (cl.freed() || cl.getRemoved())
-            continue;
-
-        //Must not be larger than the original clauses
-        if (cl.size() > poss_xor.getSize())
-            continue;
-
-        tmpClause.clear();
-        //cout << "Orig clause: " << poss_xor.getOrigCl() << endl;
-
-        bool rhs = true;
-        uint32_t i = 0;
-        for (const Lit *l = cl.begin(), *end = cl.end(); l != end; l++, i++) {
-
-            //If this literal is not meant to be inside the XOR
-            //then try to find a replacement for it from the cache
-            if (!seen[l->var()]) {
-                bool found = false;
-                //TODO stamping
-                const vector<LitExtra>& cache = solver->implCache[~lit].lits;
-                for(vector<LitExtra>::const_iterator it2 = cache.begin(), end2 = cache.end()
-                    ; it2 != end2 && !found
-                    ; it2++
-                ) {
-                    if (seen[l->var()] && !seen2[l->var()]) {
-                        found = true;
-                        seen2[l->var()] = true;
-                        rhs ^= l->sign();
-                        tmpClause.push_back(it2->getLit());
-                        //cout << "Added trans lit: " << tmpClause.back() << endl;
-                    }
-                }
-
-                //Didn't find replacement
-                if (!found)
-                    goto end;
-            }
-            else
-            //Fine, it's inside the orig clause, but we might have already added this lit
-            {
-                if (!seen2[l->var()]) {
-                    seen2[l->var()] = true;
-                    rhs ^= l->sign();
-                    tmpClause.push_back(*l);
-                    //cout << "Added lit: " << tmpClause.back() << endl;
-                } else {
-                    goto end; //HACK: we don't want both 'lit' and '~lit' end up in the clause
-                }
-            }
-        }
-
-        //either the invertedness has to match, or the size must be smaller
-        if (rhs != poss_xor.getRHS() && cl.size() == poss_xor.getSize())
-            goto end;
-
-        //If the size of this clause is the same of the base clause, then
-        //there is no point in using this clause as a base for another XOR
-        //because exactly the same things will be found.
-        if (cl.size() == poss_xor.getSize()) {
-            cl.stats.marked_clause = true;
-        }
-
-        std::sort(tmpClause.begin(), tmpClause.end());
-        //Note: cannot add this offset, because XOR won't cover all of the clause
-        poss_xor.add(tmpClause, CL_OFFSET_MAX, varsMissing);
-
-        end:;
-        //cout << "Not OK" << endl;
-
-        //Clear 'seen2'
-        for(const Lit tmp_lit: tmpClause) {
-            seen2[tmp_lit.var()] = false;
-        }
-    }
-}
-
-void XorFinder::findXorMatch(
-    watch_subarray_const occ
-    , const Lit lit
-) {
+void XorFinder::findXorMatch(watch_subarray_const occ)
+{
     xor_find_time_limit -= (int64_t)occ.size();
-    for (watch_subarray::const_iterator
-        it = occ.begin(), end = occ.end()
-        ; it != end
-        ; ++it
-    ) {
-        if (it->isIdx() || it->isBin()) {
-            continue;
-        }
-
-        //Deal with tertiary
-        if (it->isTri()) {
-            if (//Only once per tri
-                lit < it->lit2() && it->lit2() < it->lit3()
-
-                //Only for correct tri
-                && seen[it->lit2().var()] && seen[it->lit3().var()]
-            ) {
-                bool rhs = true;
-                rhs ^= lit.sign();
-                rhs ^= it->lit2().sign();
-                rhs ^= it->lit3().sign();
-
-                if (rhs == poss_xor.getRHS() || poss_xor.getSize() > 3) {
-                    tmpClause.clear();
-                    tmpClause.push_back(lit);
-                    tmpClause.push_back(it->lit2());
-                    tmpClause.push_back(it->lit3());
-
-                    xor_find_time_limit-=20;
-                    poss_xor.add(tmpClause, CL_OFFSET_MAX, varsMissing);
-                    if (poss_xor.foundAll())
-                        break;
-                }
-
-            }
+    for (const Watched& w: occ) {
+        if (w.isIdx() || w.isBin()) {
             continue;
         }
 
         //Deal with clause
 
-        //Clause will be at least 4 long
-        if (poss_xor.getSize() <= 3) {
+        //Clause will be at least 3 long
+        if (poss_xor.getSize() <= 2) {
             continue;
         }
 
-        const ClOffset offset = it->get_offset();
+        const ClOffset offset = w.get_offset();
         Clause& cl = *solver->cl_alloc.ptr(offset);
         xor_find_time_limit -= 20; //deref penalty
         if (cl.freed() || cl.getRemoved())
             continue;
 
-        //Must not be larger than the original clause
-        if (cl.size() > poss_xor.getSize())
+        //Could be smaller, but it would be expensive
+        if (cl.size() != poss_xor.getSize())
             continue;
 
         //Doesn't contain variables not in the original clause
@@ -490,7 +330,8 @@ void XorFinder::xor_together_xors()
                 toClear.push_back(Lit(v, false));
             }
 
-            if (seen[v] < 3) {
+            //Don't roll around
+            if (seen[v] != std::numeric_limits<uint16_t>::max()) {
                 seen[v]++;
             }
         }
@@ -500,15 +341,15 @@ void XorFinder::xor_together_xors()
     for(size_t i = 0; i < xors.size(); i++) {
         const Xor& x = xors[i];
         for(uint32_t v: x) {
-            Lit var(v, false);
-            assert(solver->watches.size() > var.toInt());
-            solver->watches[var].push(Watched(i));
-            solver->watches.smudge(var);
+            Lit l(v, false);
+            assert(solver->watches.size() > l.toInt());
+            solver->watches[l].push(Watched(i)); //Idx watch
+            solver->watches.smudge(l);
         }
     }
 
     //Only when a var is used exactly twice it's interesting
-    vector<uint32_t> interesting;
+    interesting.clear();
     for(const Lit l: toClear) {
         if (seen[l.var()] == 2) {
             interesting.push_back(l.var());
@@ -531,7 +372,13 @@ void XorFinder::xor_together_xors()
                 ws[i2] = ws[i];
                 i2++;
             } else if (xors[w.get_idx()] != Xor()) {
-                assert(at < 2);
+
+                //Rollaround in 'seen' -- probably will never happen
+                if (at > 2) {
+                    assert(false && "Rollaround in 'seen'? May happen, but weird");
+                    continue;
+                }
+
                 x[at] = xors[w.get_idx()];
                 idxes[at] = w.get_idx();
                 at++;
@@ -543,13 +390,13 @@ void XorFinder::xor_together_xors()
             continue;
         }
 
-        vector<uint32_t> vars = xor_two(x[0], x[1], idxes[0], idxes[1]);
+        vector<uint32_t> vars = xor_two(x[0], x[1]);
         Xor x_new(vars, x[0].rhs ^ x[1].rhs);
         xors.push_back(x_new);
         for(uint32_t v: x_new) {
-            Lit var(v, false);
-            solver->watches[var].push(Watched(xors.size()-1));
-            solver->watches.smudge(var);
+            Lit l(v, false);
+            solver->watches[l].push(Watched(xors.size()-1));
+            solver->watches.smudge(l);
         }
         xors[idxes[0]] = Xor();
         xors[idxes[1]] = Xor();
@@ -564,7 +411,7 @@ void XorFinder::xor_together_xors()
     solver->clean_occur_from_idx_types_only_smudged();
     clean_xors_from_empty();
     double recur_time = cpuTime() - myTime;
-        if (solver->conf.verbosity >= 2) {
+        if (solver->conf.verbosity) {
         cout
         << "c [occ-xor] xored together " << xored*2
         << " clauses "
@@ -580,6 +427,28 @@ void XorFinder::xor_together_xors()
             , recur_time
         );
     }
+
+    #ifdef SLOW_DEBUG
+    //Make sure none is 2.
+    for(const Xor& x: xors) {
+        for(uint32_t v: x) {
+            if (seen[v] == 0) {
+                toClear.push_back(Lit(v, false));
+            }
+
+            //Don't roll around
+            if (seen[v] != std::numeric_limits<uint16_t>::max()) {
+                seen[v]++;
+            }
+        }
+    }
+
+    for(const Lit c: toClear) {
+        assert(seen[c.var()] != 2);
+        seen[c.var()] = 0;
+    }
+    toClear.clear();
+    #endif
 }
 
 void XorFinder::clean_xors_from_empty()
@@ -659,7 +528,7 @@ bool XorFinder::add_new_truths_from_xors()
     uint32_t num_bins_added = solver->binTri.redBins - origBins;
     uint32_t num_units_added = solver->trail_size() - origTrailSize;
 
-    if (solver->conf.verbosity >= 2) {
+    if (solver->conf.verbosity) {
         cout
         << "c [occ-xor] added unit " << num_units_added
         << " bin " << num_bins_added
@@ -681,8 +550,7 @@ bool XorFinder::add_new_truths_from_xors()
 
 vector<uint32_t> XorFinder::xor_two(
     Xor& x1, Xor& x2
-    , const size_t idx1, const size_t idx2)
-{
+) {
     x1.sort();
     x2.sort();
     vector<uint32_t> ret;
@@ -706,6 +574,11 @@ vector<uint32_t> XorFinder::xor_two(
         if (a == b) {
             x1_at++;
             x2_at++;
+
+            seen[a] -= 2;
+            if (seen[a] == 2) {
+                interesting.push_back(a);
+            }
             continue;
         }
 

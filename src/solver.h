@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifndef SOLVER_H
 #define SOLVER_H
@@ -65,16 +66,6 @@ class SharedData;
 class ReduceDB;
 class InTree;
 
-class LitReachData {
-    public:
-        LitReachData() :
-            lit(lit_Undef)
-            , numInCache(0)
-        {}
-        Lit lit;
-        uint32_t numInCache;
-};
-
 struct SolveStats
 {
     uint64_t numSimplify = 0;
@@ -95,11 +86,17 @@ class Solver : public Searcher
         bool add_xor_clause_outer(const vector<uint32_t>& vars, bool rhs);
 
         lbool solve_with_assumptions(const vector<Lit>* _assumptions = NULL);
+        lbool simplify_with_assumptions(const vector<Lit>* _assumptions = NULL);
         void  set_shared_data(SharedData* shared_data);
+
+        //Querying model
         lbool model_value (const Lit p) const;  ///<Found model value for lit
         lbool model_value (const uint32_t p) const;  ///<Found model value for var
+        lbool full_model_value (const Lit p) const;  ///<Found model value for lit
+        lbool full_model_value (const uint32_t p) const;  ///<Found model value for var
         const vector<lbool>& get_model() const;
         const vector<Lit>& get_final_conflict() const;
+
         void open_file_and_dump_irred_clauses(string fname) const;
         void open_file_and_dump_red_clauses(string fname) const;
         vector<pair<Lit, Lit> > get_all_binary_xors() const;
@@ -150,8 +147,6 @@ class Solver : public Searcher
         StrImplWImplStamp* dist_impl_with_impl = NULL;
         CompHandler*           compHandler = NULL;
 
-        vector<LitReachData> litReachable;
-
         SearchStats sumSearchStats;
         PropStats sumPropStats;
 
@@ -184,32 +179,28 @@ class Solver : public Searcher
         void attachClause(
             const Clause& c
             , const bool checkAttach = true
-        ) override;
+        );
         void attach_bin_clause(
             const Lit lit1
             , const Lit lit2
             , const bool red
             , const bool checkUnassignedFirst = true
-        ) override;
-        void attach_tri_clause(
-            const Lit lit1
-            , const Lit lit2
-            , const Lit lit3
-            , const bool red
-        ) override;
-        void detach_tri_clause(
-            Lit lit1
-            , Lit lit2
-            , Lit lit3
-            , bool red
-            , bool allow_empty_watch = false
-        ) override;
+        );
         void detach_bin_clause(
             Lit lit1
             , Lit lit2
             , bool red
             , bool allow_empty_watch = false
-        ) override;
+            , bool allow_change_order = false
+        ) {
+            if (red) {
+                binTri.redBins--;
+            } else {
+                binTri.irredBins--;
+            }
+
+            PropEngine::detach_bin_clause(lit1, lit2, red, allow_empty_watch, allow_change_order);
+        }
         void detachClause(const Clause& c, const bool removeDrat = true);
         void detachClause(const ClOffset offset, const bool removeDrat = true);
         void detach_modified_clause(
@@ -217,7 +208,7 @@ class Solver : public Searcher
             , const Lit lit2
             , const uint32_t origSize
             , const Clause* address
-        ) override;
+        );
         Clause* add_clause_int(
             const vector<Lit>& lits
             , const bool red = false
@@ -227,16 +218,19 @@ class Solver : public Searcher
             , bool addDrat = true
             , const Lit drat_first = lit_Undef
         );
-        void clear_clauses_stats();
         template<class T> vector<Lit> clauseBackNumbered(const T& cl) const;
         size_t mem_used() const;
         void dump_memory_stats_to_sql();
         void set_sqlite(string filename);
-        void set_mysql(
-            string sqlServer
-            , string sqlUser
-            , string sqlPass
-            , string sqlDatabase);
+        //Not Private for testing (maybe could be called from outside)
+        void renumber_variables(bool must_renumber = true);
+
+        uint32_t undefine(vector<uint32_t>& trail_lim_vars);
+
+        //if set to TRUE, a clause has been removed during add_clause_int
+        //that contained "lit, ~lit". So "lit" must be set to a value
+        //Contains _outer_ variables
+        vector<char> undef_must_set_vars;
 
     private:
         friend class Prober;
@@ -245,10 +239,10 @@ class Solver : public Searcher
         uint64_t mem_used_vardata() const;
         SolveFeatures calculate_features() const;
         void reconfigure(int val);
-        void reset_reason_levels_of_vars_to_zero();
+        long calc_num_confl_to_do_this_iter(const size_t iteration_num) const;
 
         vector<Lit> finalCl_tmp;
-        bool sort_and_clean_clause(vector<Lit>& ps, const vector<Lit>& origCl);
+        bool sort_and_clean_clause(vector<Lit>& ps, const vector<Lit>& origCl, const bool red);
         void set_up_sql_writer();
         vector<std::pair<string, string> > sql_tags;
 
@@ -259,25 +253,15 @@ class Solver : public Searcher
         unsigned num_bits_set(const size_t x, const unsigned max_size) const;
         void check_too_large_variable_number(const vector<Lit>& lits) const;
         void set_assumptions();
-        struct ReachabilityStats
-        {
-            ReachabilityStats& operator+=(const ReachabilityStats& other);
-            void print() const;
-            void print_short(const Solver* solver) const;
-
-            double cpu_time = 0.0;
-            size_t numLits = 0;
-            size_t dominators = 0;
-            size_t numLitsDependent = 0;
-        };
 
         lbool solve();
+        lbool simplify_problem_outside();
+        void move_to_outside_assumps(const vector<Lit>* assumps);
         vector<Lit> back_number_from_outside_to_outer_tmp;
-        template<class T>
-        void back_number_from_outside_to_outer(const vector<T>& lits)
+        void back_number_from_outside_to_outer(const vector<Lit>& lits)
         {
             back_number_from_outside_to_outer_tmp.clear();
-            for (const T& lit: lits) {
+            for (const Lit lit: lits) {
                 assert(lit.var() < nVarsOutside());
                 back_number_from_outside_to_outer_tmp.push_back(map_to_with_bva(lit));
                 assert(back_number_from_outside_to_outer_tmp.back().var() < nVarsOuter());
@@ -289,7 +273,7 @@ class Solver : public Searcher
         //Stats printing
         void print_norm_stats(const double cpu_time) const;
         void print_min_stats(const double cpu_time) const;
-        void print_all_stats(const double cpu_time) const;
+        void print_full_restart_stat(const double cpu_time) const;
 
         lbool simplify_problem(const bool startup);
         bool execute_inprocess_strategy(const bool startup, const string& strategy);
@@ -297,6 +281,8 @@ class Solver : public Searcher
         void check_minimization_effectiveness(lbool status);
         void check_recursive_minimization_effectiveness(const lbool status);
         void extend_solution();
+        void check_too_many_low_glues();
+        bool adjusted_glue_cutoff_if_too_many = false;
 
         /////////////////////////////
         // Temporary datastructs -- must be cleared before use
@@ -304,7 +290,7 @@ class Solver : public Searcher
 
         /////////////////////////////
         //Renumberer
-        void renumber_variables();
+        double calc_renumber_saving();
         void free_unused_watches();
         void save_on_var_memory(uint32_t newNumVars);
         void unSaveVarMem();
@@ -315,6 +301,26 @@ class Solver : public Searcher
         void renumber_clauses(const vector<uint32_t>& outerToInter);
         void renumber_xor_clauses(const vector<uint32_t>& outerToInter);
         void test_renumbering() const;
+
+        //Value Unsetter
+        struct FindUndef {
+            //If set to TRUE, then that clause already has only 1 lit that is true,
+            //so it can be skipped during updateFixNeed()
+            vector<char> dontLookAtClause;
+
+            vector<uint32_t> satisfies;
+            vector<unsigned char> can_be_unset;
+            vector<uint32_t>* trail_lim_vars;
+            int64_t can_be_unsetSum;
+            bool must_fix;
+            uint32_t num_fixed;
+            bool verbose = false;
+        };
+        FindUndef* undef;
+        bool undef_check_must_fix();
+        void undef_fill_potentials();
+        void undef_unset_potentials();
+        template<class C> bool undef_look_at_one_clause(const C c);
 
 
 
@@ -328,11 +334,6 @@ class Solver : public Searcher
         /////////////////////
         // Data
         size_t               zeroLevAssignsByCNF = 0;
-        size_t               zero_level_assigns_by_searcher = 0;
-        void calculate_reachability();
-
-        //Main up stats
-        ReachabilityStats reachStats;
 
         /////////////////////
         // Clauses
@@ -352,7 +353,7 @@ class Solver : public Searcher
 
 inline void Solver::set_decision_var(const uint32_t var)
 {
-    insertVarOrder(var);
+    insert_var_order_all(var);
 }
 
 inline uint64_t Solver::getNumLongClauses() const
@@ -406,12 +407,11 @@ inline vector<Lit> Solver::clauseBackNumbered(const T& cl) const
     return tmpCl;
 }
 
-inline lbool Solver::solve_with_assumptions(
-    const vector<Lit>* _assumptions
-) {
+inline void Solver::move_to_outside_assumps(const vector<Lit>* assumps)
+{
     outside_assumptions.clear();
-    if (_assumptions) {
-        for(const Lit lit: *_assumptions) {
+    if (assumps) {
+        for(const Lit lit: *assumps) {
             if (lit.var() >= nVarsOutside()) {
                 std::cerr << "ERROR: Assumption variable " << (lit.var()+1)
                 << " is too large, you never"
@@ -422,7 +422,20 @@ inline lbool Solver::solve_with_assumptions(
             outside_assumptions.push_back(lit);
         }
     }
+}
+
+inline lbool Solver::solve_with_assumptions(
+    const vector<Lit>* _assumptions
+) {
+    move_to_outside_assumps(_assumptions);
     return solve();
+}
+
+inline lbool Solver::simplify_with_assumptions(
+    const vector<Lit>* _assumptions
+) {
+    move_to_outside_assumps(_assumptions);
+    return simplify_problem_outside();
 }
 
 inline bool Solver::find_with_stamp_a_or_b(Lit a, const Lit b) const
@@ -513,6 +526,26 @@ inline void Solver::setConf(const SolverConf& _conf)
 inline bool Solver::prop_at_head() const
 {
     return qhead == trail.size();
+}
+
+inline lbool Solver::model_value (const Lit p) const
+{
+    return model[p.var()] ^ p.sign();
+}
+
+inline lbool Solver::model_value (const uint32_t p) const
+{
+    return model[p];
+}
+
+inline lbool Solver::full_model_value (const Lit p) const
+{
+    return full_model[p.var()] ^ p.sign();
+}
+
+inline lbool Solver::full_model_value  (const uint32_t p) const
+{
+    return full_model[p];
 }
 
 } //end namespace

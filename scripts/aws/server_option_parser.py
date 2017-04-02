@@ -26,6 +26,10 @@ For the --solver options you can give:
                       default=False, dest="verbose", help="Be more verbose"
                       )
 
+    parser.add_option("--numclients", "-c", default=None, type=int,
+                      dest="client_count", help="Number of clients to launch"
+                      )
+
     parser.add_option("--port", "-p", default=10000, dest="port",
                       help="Port to listen on. [default: %default]", type="int"
                       )
@@ -48,18 +52,18 @@ For the --solver options you can give:
                       type=int
                       )
 
-    parser.add_option("--cnfdir", default="satcomp14", dest="cnf_dir",
+    parser.add_option("--cnflist", default="satcomp14", dest="cnf_list",
                       type=str,
                       help="The list of CNF files to solve, first line the dir"
                       "[default: %default]",
                       )
 
     parser.add_option("--dir", default="/home/ubuntu/", dest="base_dir", type=str,
-                      help="The home dir of cryptominisat"
+                      help="The home dir of cryptominisat [default: %default]"
                       )
 
     parser.add_option("--solver",
-                      default="cryptominisat/build/cryptominisat4",
+                      default="cryptominisat/build/cryptominisat5",
                       dest="solver",
                       help="Solver executable"
                       "[default: %default]",
@@ -95,6 +99,14 @@ For the --solver options you can give:
                       action="store_true", help="Use DRAT"
                       )
 
+    parser.add_option("--stats", default=False, dest="stats",
+                      action="store_true", help="Use STATS and get SQLITE data"
+                      )
+
+    parser.add_option("--gauss", default=False, dest="gauss",
+                      action="store_true", help="Use GAUSS"
+                      )
+
     parser.add_option("--logfile", dest="logfile_name", type=str,
                       default="python_server_log.txt", help="Name of LOG file")
 
@@ -107,6 +119,7 @@ For the --solver options you can give:
     options.logfile_name = options.base_dir + options.logfile_name
     options.s3_folder += "-" + time.strftime("%d-%B-%Y")
     options.s3_folder += "-%s" % rnd_id()
+    options.s3_folder += "-%s" % options.cnf_list
 
     return options, args
 

@@ -1,26 +1,27 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "constants.h"
-#include "cryptominisat4/cryptominisat.h"
+#include "cryptominisat5/cryptominisat.h"
 #include "solver.h"
 #include "drat.h"
 #include "shareddata.h"
@@ -32,6 +33,11 @@
 using std::thread;
 
 #define CACHE_SIZE 10ULL*1000ULL*1000UL
+#ifndef LIMITMEM
+#define MAX_VARS (1ULL<<28)
+#else
+#define MAX_VARS 3000
+#endif
 
 using namespace CMSat;
 
@@ -79,6 +85,7 @@ namespace CMSat {
         bool okay = true;
         std::ofstream* log = NULL;
         int sql = 0;
+        double timeout = std::numeric_limits<double>::max();
     };
 }
 
@@ -116,7 +123,7 @@ DLL_PUBLIC SATSolver::SATSolver(
 {
     data = new CMSatPrivateData(interrupt_asap);
 
-    if (config && ((SolverConf*) config)->verbosity >= 2) {
+    if (config && ((SolverConf*) config)->verbosity) {
         print_thread_start_and_finish = true;
     }
     data->solvers.push_back(new Solver((SolverConf*) config, data->must_interrupt));
@@ -143,24 +150,22 @@ void update_config(SolverConf& conf, unsigned thread_num)
             conf.restartType = Restart::geom;
             conf.polarity_mode = CMSat::PolarityMode::polarmode_neg;
 
-            conf.inc_max_temp_red_cls = 1.02;
+            conf.inc_max_temp_lev2_red_cls = 1.02;
             conf.ratio_keep_clauses[clean_to_int(ClauseClean::glue)] = 0;
-            conf.ratio_keep_clauses[clean_to_int(ClauseClean::size)] = 0;
             conf.ratio_keep_clauses[clean_to_int(ClauseClean::activity)] = 0.5;
             break;
         }
         case 2: {
             //Similar to old CMS except we look at learnt DB size insteead
             //of conflicts to see if we need to clean.
-            conf.ratio_keep_clauses[clean_to_int(ClauseClean::size)] = 0;
             conf.ratio_keep_clauses[clean_to_int(ClauseClean::activity)] = 0;
             conf.ratio_keep_clauses[clean_to_int(ClauseClean::glue)] = 0.5;
-            conf.glue_must_keep_clause_if_below_or_eq = 0;
-            conf.inc_max_temp_red_cls = 1.03;
+            conf.glue_put_lev0_if_below_or_eq = 0;
+            conf.inc_max_temp_lev2_red_cls = 1.03;
             break;
         }
         case 3: {
-            conf.max_temporary_learnt_clauses = 40000;
+            //conf.max_temporary_learnt_clauses = 40000;
             conf.var_decay_max = 0.80;
             break;
         }
@@ -169,16 +174,15 @@ void update_config(SolverConf& conf, unsigned thread_num)
             break;
         }
         case 5: {
-            conf.max_temporary_learnt_clauses = 30000;
+            //conf.max_temporary_learnt_clauses = 10000;
             break;
         }
         case 6: {
             conf.do_bva = false;
-            conf.glue_must_keep_clause_if_below_or_eq = 2;
+            conf.glue_put_lev0_if_below_or_eq = 2;
             conf.varElimRatioPerIter = 1;
-            conf.inc_max_temp_red_cls = 1.04;
+            conf.inc_max_temp_lev2_red_cls = 1.04;
             conf.ratio_keep_clauses[clean_to_int(ClauseClean::glue)] = 0.1;
-            conf.ratio_keep_clauses[clean_to_int(ClauseClean::size)] = 0.1;
             conf.ratio_keep_clauses[clean_to_int(ClauseClean::activity)] = 0.3;
             conf.var_decay_max = 0.90; //more 'slow' in adjusting activities
             break;
@@ -190,20 +194,22 @@ void update_config(SolverConf& conf, unsigned thread_num)
             conf.more_red_minim_limit_cache = 1200;
             conf.more_red_minim_limit_binary = 600;
             conf.max_num_lits_more_red_min = 20;
-            conf.max_temporary_learnt_clauses = 10000;
+            //conf.max_temporary_learnt_clauses = 10000;
             conf.var_decay_max = 0.99; //more 'fast' in adjusting activities
             break;
         }
         case 8: {
             //Different glue limit
-            conf.glue_must_keep_clause_if_below_or_eq = 4;
+            conf.glue_put_lev0_if_below_or_eq = 4;
+            //conf.glue_put_lev2_if_below_or_eq = 8;
             conf.max_num_lits_more_red_min = 3;
             conf.max_glue_more_minim = 4;
             break;
         }
         case 9: {
             //Different glue limit
-            conf.glue_must_keep_clause_if_below_or_eq = 7;
+            conf.glue_put_lev0_if_below_or_eq = 2;
+            conf.glue_put_lev1_if_below_or_eq = 2;
             break;
         }
         case 10: {
@@ -214,7 +220,8 @@ void update_config(SolverConf& conf, unsigned thread_num)
             break;
         }
         case 11: {
-            conf.glue_must_keep_clause_if_below_or_eq = 3;
+            conf.glue_put_lev0_if_below_or_eq = 3;
+            conf.glue_put_lev1_if_below_or_eq = 5;
             conf.var_decay_max = 0.97;
             break;
         }
@@ -230,14 +237,13 @@ void update_config(SolverConf& conf, unsigned thread_num)
             conf.varElimRatioPerIter = 1;
             conf.restartType = Restart::geom;
 
-            conf.inc_max_temp_red_cls = 1.01;
+            conf.inc_max_temp_lev2_red_cls = 1.01;
             conf.ratio_keep_clauses[clean_to_int(ClauseClean::glue)] = 0;
-            conf.ratio_keep_clauses[clean_to_int(ClauseClean::size)] = 0;
             conf.ratio_keep_clauses[clean_to_int(ClauseClean::activity)] = 0.3;
             break;
         }
         case 15: {
-            conf.inc_max_temp_red_cls = 1.001;
+            conf.inc_max_temp_lev2_red_cls = 1.001;
             break;
         }
 
@@ -251,7 +257,7 @@ DLL_PUBLIC void SATSolver::set_num_threads(unsigned num)
 {
     if (num <= 0) {
         std::cerr << "ERROR: Number of threads must be at least 1" << endl;
-        exit(-1);
+        throw std::runtime_error("ERROR: Number of threads must be at least 1");
     }
     if (num == 1) {
         return;
@@ -259,12 +265,12 @@ DLL_PUBLIC void SATSolver::set_num_threads(unsigned num)
 
     if (data->solvers[0]->drat->enabled()) {
         std::cerr << "ERROR: DRAT cannot be used in multi-threaded mode" << endl;
-        exit(-1);
+        throw std::runtime_error("ERROR: DRAT cannot be used in multi-threaded mode");
     }
 
     if (data->cls > 0 || nVars() > 0) {
         std::cerr << "ERROR: You must first call set_num_threads() and only then add clauses and variables" << endl;
-        exit(-1);
+        throw std::runtime_error("ERROR: You must first call set_num_threads() and only then add clauses and variables");
     }
 
     data->cls_lits.reserve(CACHE_SIZE);
@@ -369,7 +375,7 @@ DLL_PUBLIC void SATSolver::set_max_confl(int64_t max_confl)
   for (size_t i = 0; i < data->solvers.size(); ++i) {
     Solver& s = *data->solvers[i];
     if (max_confl >= 0) {
-      s.conf.maxConfl = max_confl;
+      s.conf.maxConfl = s.get_stats().conflStats.numConflicts + max_confl;
     }
   }
 }
@@ -392,6 +398,22 @@ DLL_PUBLIC void SATSolver::set_no_simplify()
         s.conf.perform_occur_based_simp = false;
         s.conf.do_simplify_problem = false;
     }
+}
+
+DLL_PUBLIC void SATSolver::set_allow_otf_gauss()
+{
+    #ifndef USE_GAUSS
+    cout << "ERROR: CryptoMiniSat was not compiled with GAUSS" << endl;
+    exit(-1);
+    #else
+    for (size_t i = 0; i < data->solvers.size(); ++i) {
+        Solver& s = *data->solvers[i];
+        s.conf.reconfigure_at = 0;
+        s.conf.reconfigure_val = 15;
+        s.conf.gaussconf.max_num_matrixes = 10;
+        s.conf.gaussconf.autodisable = false;
+    }
+    #endif
 }
 
 DLL_PUBLIC void SATSolver::set_no_simplify_at_startup()
@@ -418,12 +440,34 @@ DLL_PUBLIC void SATSolver::set_no_bva()
     }
 }
 
+DLL_PUBLIC void SATSolver::set_greedy_undef()
+{
+    for (size_t i = 0; i < data->solvers.size(); ++i) {
+        Solver& s = *data->solvers[i];
+        s.conf.greedy_undef = true;
+    }
+}
+
+DLL_PUBLIC void SATSolver::set_independent_vars(vector<uint32_t>* ind_vars)
+{
+    for (size_t i = 0; i < data->solvers.size(); ++i) {
+        Solver& s = *data->solvers[i];
+        s.conf.independent_vars = ind_vars;
+    }
+}
+
+
 DLL_PUBLIC void SATSolver::set_verbosity(unsigned verbosity)
 {
   for (size_t i = 0; i < data->solvers.size(); ++i) {
     Solver& s = *data->solvers[i];
     s.conf.verbosity = verbosity;
   }
+}
+
+DLL_PUBLIC void SATSolver::set_timeout_all_calls(double timeout)
+{
+    data->timeout = timeout;
 }
 
 DLL_PUBLIC bool SATSolver::add_clause(const vector< Lit >& lits)
@@ -498,11 +542,12 @@ DLL_PUBLIC bool SATSolver::add_xor_clause(const std::vector<unsigned>& vars, boo
     return ret;
 }
 
-struct OneThreadSolve
+struct OneThreadCalc
 {
-    OneThreadSolve(DataForThread& _data_for_thread, size_t _tid) :
+    OneThreadCalc(DataForThread& _data_for_thread, size_t _tid, bool _solve) :
         data_for_thread(_data_for_thread)
         , tid(_tid)
+        , solve(_solve)
     {}
 
     void operator()()
@@ -516,7 +561,12 @@ struct OneThreadSolve
 
         OneThreadAddCls cls_adder(data_for_thread, tid);
         cls_adder();
-        lbool ret = data_for_thread.solvers[tid]->solve_with_assumptions(data_for_thread.assumptions);
+        lbool ret;
+        if (solve) {
+            ret = data_for_thread.solvers[tid]->solve_with_assumptions(data_for_thread.assumptions);
+        } else {
+            ret = data_for_thread.solvers[tid]->simplify_with_assumptions(data_for_thread.assumptions);
+        }
 
         if (print_thread_start_and_finish) {
             double end_time = cpuTime();
@@ -542,15 +592,26 @@ struct OneThreadSolve
     DataForThread& data_for_thread;
     const size_t tid;
     double start_time;
+    bool solve;
 };
 
-DLL_PUBLIC lbool SATSolver::solve(const vector< Lit >* assumptions)
+lbool calc(const vector< Lit >* assumptions, bool solve, CMSatPrivateData *data)
 {
     //Reset the interrupt signal if it was set
     data->must_interrupt->store(false, std::memory_order_relaxed);
 
+    //Set timeout information
+    if (data->timeout != std::numeric_limits<double>::max()) {
+        for (size_t i = 0; i < data->solvers.size(); ++i) {
+            Solver& s = *data->solvers[i];
+            s.conf.maxTime = cpuTime() + data->timeout;
+        }
+    }
+
     if (data->log) {
-        (*data->log) << "c Solver::solve( ";
+        (*data->log) << "c Solver::"
+        << (solve ? "solve" : "simplify")
+        << "( ";
         if (assumptions) {
             (*data->log) << *assumptions;
         }
@@ -568,7 +629,12 @@ DLL_PUBLIC lbool SATSolver::solve(const vector< Lit >* assumptions)
         data->solvers[0]->new_vars(data->vars_to_add);
         data->vars_to_add = 0;
 
-        lbool ret = data->solvers[0]->solve_with_assumptions(assumptions);
+        lbool ret ;
+        if (solve) {
+            ret = data->solvers[0]->solve_with_assumptions(assumptions);
+        } else {
+            ret = data->solvers[0]->simplify_with_assumptions(assumptions);
+        }
         data->okay = data->solvers[0]->okay();
         return ret;
     }
@@ -580,7 +646,7 @@ DLL_PUBLIC lbool SATSolver::solve(const vector< Lit >* assumptions)
         ; i < data->solvers.size()
         ; i++
     ) {
-        thds.push_back(thread(OneThreadSolve(data_for_thread, i)));
+        thds.push_back(thread(OneThreadCalc(data_for_thread, i, solve)));
     }
     for(std::thread& thread : thds){
         thread.join();
@@ -595,6 +661,16 @@ DLL_PUBLIC lbool SATSolver::solve(const vector< Lit >* assumptions)
     data->vars_to_add = 0;
     data->okay = data->solvers[*data_for_thread.which_solved]->okay();
     return real_ret;
+}
+
+DLL_PUBLIC lbool SATSolver::solve(const vector< Lit >* assumptions)
+{
+    return calc(assumptions, true, data);
+}
+
+DLL_PUBLIC lbool SATSolver::simplify(const vector< Lit >* assumptions)
+{
+    return calc(assumptions, false, data);
 }
 
 DLL_PUBLIC const vector< lbool >& SATSolver::get_model() const
@@ -615,14 +691,17 @@ DLL_PUBLIC uint32_t SATSolver::nVars() const
 
 DLL_PUBLIC void SATSolver::new_var()
 {
-    if (data->log) {
-        (*data->log) << "c Solver::new_var()" << endl;
-    }
-    data->vars_to_add += 1;
+    new_vars(1);
 }
 
 DLL_PUBLIC void SATSolver::new_vars(const size_t n)
 {
+    if (n >= MAX_VARS
+        || (data->vars_to_add + n) >= MAX_VARS
+    ) {
+        throw CMSat::TooManyVarsError();
+    }
+
     if (data->log) {
         (*data->log) << "c Solver::new_vars( " << n << " )" << endl;
     }
@@ -756,22 +835,3 @@ DLL_PUBLIC void SATSolver::set_sqlite(std::string filename)
     data->solvers[0]->set_sqlite(filename);
 }
 
-DLL_PUBLIC void SATSolver::set_mysql(
-    std::string sqlServer
-    , std::string sqlUser
-    , std::string sqlPass
-    , std::string sqlDatabase)
-{
-    if (data->solvers.size() > 1) {
-        std::cerr
-        << "Multithreaded solving and SQL cannot be specified at the same time"
-        << endl;
-        exit(-1);
-    }
-    data->sql = 2;
-    data->solvers[0]->set_mysql(
-        sqlServer
-        , sqlUser
-        , sqlPass
-        , sqlDatabase);
-}

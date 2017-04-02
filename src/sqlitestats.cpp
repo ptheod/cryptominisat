@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #include "sqlitestats.h"
 #include "solvertypes.h"
@@ -112,7 +113,7 @@ bool SQLiteStats::connectServer(const int verbosity)
         std::exit(-1);
     }
 
-    if (verbosity >= 1) {
+    if (verbosity) {
         cout << "c writing to SQLite file: " << filename << endl;
     }
 
@@ -170,7 +171,7 @@ void SQLiteStats::getID(const Solver* solver)
         }
     }
 
-    if (solver->getConf().verbosity >= 1) {
+    if (solver->getConf().verbosity) {
         cout << "c SQL runID is " << runID << endl;
     }
 }
@@ -287,7 +288,7 @@ void SQLiteStats::mem_used(
     //Position
     sqlite3_bind_int64(stmtMemUsed, bindAt++, runID);
     sqlite3_bind_int64(stmtMemUsed, bindAt++, solver->get_solve_stats().numSimplify);
-    sqlite3_bind_int64(stmtMemUsed, bindAt++, solver->sumConflicts());
+    sqlite3_bind_int64(stmtMemUsed, bindAt++, solver->sumConflicts);
     sqlite3_bind_double(stmtMemUsed, bindAt++, given_time);
     //memory stats
     sqlite3_bind_text(stmtMemUsed, bindAt++, name.c_str(), -1, NULL);
@@ -359,7 +360,7 @@ void SQLiteStats::time_passed(
     int bindAt = 1;
     sqlite3_bind_int64(stmtTimePassed, bindAt++, runID);
     sqlite3_bind_int64(stmtTimePassed, bindAt++, solver->get_solve_stats().numSimplify);
-    sqlite3_bind_int64(stmtTimePassed, bindAt++, solver->sumConflicts());
+    sqlite3_bind_int64(stmtTimePassed, bindAt++, solver->sumConflicts);
     sqlite3_bind_double(stmtTimePassed, bindAt++, cpuTime());
     sqlite3_bind_text(stmtTimePassed, bindAt++, name.c_str(), -1, NULL);
     sqlite3_bind_double(stmtTimePassed, bindAt++, time_passed);
@@ -396,7 +397,7 @@ void SQLiteStats::time_passed_min(
     int bindAt = 1;
     sqlite3_bind_int64(stmtTimePassed, bindAt++, runID);
     sqlite3_bind_int64(stmtTimePassed, bindAt++, solver->get_solve_stats().numSimplify);
-    sqlite3_bind_int64(stmtTimePassed, bindAt++, solver->sumConflicts());
+    sqlite3_bind_int64(stmtTimePassed, bindAt++, solver->sumConflicts);
     sqlite3_bind_double(stmtTimePassed, bindAt++, cpuTime());
     sqlite3_bind_text(stmtTimePassed, bindAt++, name.c_str(), -1, NULL);
     sqlite3_bind_double(stmtTimePassed, bindAt++, time_passed);
@@ -428,7 +429,7 @@ void SQLiteStats::time_passed_min(
 //Prepare statement for restart
 void SQLiteStats::initRestartSTMT()
 {
-    const size_t numElems = 75;
+    const size_t numElems = 65;
 
     std::stringstream ss;
     ss << "insert into `restart`"
@@ -437,15 +438,14 @@ void SQLiteStats::initRestartSTMT()
     << "  `runID`, `simplifications`, `restarts`, `conflicts`, `runtime`"
 
     //Clause stats
-    << ", numIrredBins, numIrredTris, numIrredLongs"
-    << ", numRedBins, numRedTris, numRedLongs"
+    << ", numIrredBins, numIrredLongs"
+    << ", numRedBins, numRedLongs"
     << ", numIrredLits, numRedLits"
 
     //Conflict stats
     << ", `glue`, `glueSD`, `glueMin`, `glueMax`"
     << ", `size`, `sizeSD`, `sizeMin`, `sizeMax`"
     << ", `resolutions`, `resolutionsSD`, `resolutionsMin`, `resolutionsMax`"
-    << ", `conflAfterConfl`"
 
     //Search stats
     << ", `branchDepth`, `branchDepthSD`, `branchDepthMin`, `branchDepthMax`"
@@ -455,19 +455,17 @@ void SQLiteStats::initRestartSTMT()
 
     //Propagations
     << ", `propBinIrred` , `propBinRed` "
-    << ", `propTriIrred` , `propTriRed`"
     << ", `propLongIrred` , `propLongRed`"
 
     //Conflicts
     << ", `conflBinIrred`, `conflBinRed`"
-    << ", `conflTriIrred`, `conflTriRed`"
     << ", `conflLongIrred`, `conflLongRed`"
 
     //Reds
-    << ", `learntUnits`, `learntBins`, `learntTris`, `learntLongs`"
+    << ", `learntUnits`, `learntBins`, `learntLongs`"
 
     //Resolutions
-    << ", `resolBinIrred`, `resolBinRed`, `resolTriIrred`, `resolTriRed`, `resolLIrred`, `resolLRed`"
+    << ", `resolBinIrred`, `resolBinRed`, `resolLIrred`, `resolLRed`"
 
     //Var stats
     << ", `propagations`"
@@ -507,16 +505,14 @@ void SQLiteStats::restart(
     sqlite3_bind_int64(stmtRst, bindAt++, runID);
     sqlite3_bind_int64(stmtRst, bindAt++, solver->get_solve_stats().numSimplify);
     sqlite3_bind_int64(stmtRst, bindAt++, search->sumRestarts());
-    sqlite3_bind_int64(stmtRst, bindAt++, solver->sumConflicts());
+    sqlite3_bind_int64(stmtRst, bindAt++, solver->sumConflicts);
     sqlite3_bind_double(stmtRst, bindAt++, cpuTime());
 
 
     sqlite3_bind_int64(stmtRst, bindAt++, binTri.irredBins);
-    sqlite3_bind_int64(stmtRst, bindAt++, binTri.irredTris);
     sqlite3_bind_int64(stmtRst, bindAt++, solver->get_num_long_irred_cls());
 
     sqlite3_bind_int64(stmtRst, bindAt++, binTri.redBins);
-    sqlite3_bind_int64(stmtRst, bindAt++, binTri.redTris);
     sqlite3_bind_int64(stmtRst, bindAt++, solver->get_num_long_red_cls());
 
     sqlite3_bind_int64(stmtRst, bindAt++, solver->litStats.irredLits);
@@ -537,8 +533,6 @@ void SQLiteStats::restart(
     sqlite3_bind_double(stmtRst, bindAt++, std:: sqrt(searchHist.numResolutionsHist.var()));
     sqlite3_bind_double(stmtRst, bindAt++, searchHist.numResolutionsHist.getMin());
     sqlite3_bind_double(stmtRst, bindAt++, searchHist.numResolutionsHist.getMax());
-
-    sqlite3_bind_double(stmtRst, bindAt++, searchHist.conflictAfterConflict.avg());
 
     //Search stats
     sqlite3_bind_double(stmtRst, bindAt++, searchHist.branchDepthHist.avg());
@@ -564,30 +558,23 @@ void SQLiteStats::restart(
     //Prop
     sqlite3_bind_int64(stmtRst, bindAt++, thisPropStats.propsBinIrred);
     sqlite3_bind_int64(stmtRst, bindAt++, thisPropStats.propsBinRed);
-    sqlite3_bind_int64(stmtRst, bindAt++, thisPropStats.propsTriIrred);
-    sqlite3_bind_int64(stmtRst, bindAt++, thisPropStats.propsTriRed);
     sqlite3_bind_int64(stmtRst, bindAt++, thisPropStats.propsLongIrred);
     sqlite3_bind_int64(stmtRst, bindAt++, thisPropStats.propsLongRed);
 
     //Confl
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.conflStats.conflsBinIrred);
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.conflStats.conflsBinRed);
-    sqlite3_bind_int64(stmtRst, bindAt++, thisStats.conflStats.conflsTriIrred);
-    sqlite3_bind_int64(stmtRst, bindAt++, thisStats.conflStats.conflsTriRed);
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.conflStats.conflsLongIrred);
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.conflStats.conflsLongRed);
 
     //Red
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.learntUnits);
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.learntBins);
-    sqlite3_bind_int64(stmtRst, bindAt++, thisStats.learntTris);
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.learntLongs);
 
     //Resolv stats
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.resolvs.binIrred);
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.resolvs.binRed);
-    sqlite3_bind_int64(stmtRst, bindAt++, thisStats.resolvs.triIrred);
-    sqlite3_bind_int64(stmtRst, bindAt++, thisStats.resolvs.triRed);
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.resolvs.longIrred);
     sqlite3_bind_int64(stmtRst, bindAt++, thisStats.resolvs.longRed);
 
@@ -633,7 +620,7 @@ void SQLiteStats::restart(
 //Prepare statement for restart
 void SQLiteStats::initReduceDBSTMT()
 {
-    const size_t numElems = 40;
+    const size_t numElems = 36;
 
     std::stringstream ss;
     ss << "insert into `reduceDB`"
@@ -649,7 +636,6 @@ void SQLiteStats::initReduceDBSTMT()
     //Clean data
     << ", removedNum, removedLits, removedGlue"
     << ", removedResolBinIrred, removedResolBinRed"
-    << ", removedResolTriIrred, removedResolTriRed"
     << ", removedResolLIrred, removedResolLRed"
     << ", removedAge"
     << ", removedLitVisited, removedProp, removedConfl"
@@ -657,7 +643,6 @@ void SQLiteStats::initReduceDBSTMT()
 
     << ", remainNum, remainLits, remainGlue"
     << ", remainResolBinIrred, remainResolBinRed"
-    << ", remainResolTriIrred, remainResolTriRed"
     << ", remainResolLIrred, remainResolLRed"
     << ", remainAge"
     << ", remainLitVisited, remainProp, remainConfl"
@@ -694,7 +679,7 @@ void SQLiteStats::reduceDB(
     sqlite3_bind_int64(stmtReduceDB, bindAt++, runID);
     sqlite3_bind_int64(stmtReduceDB, bindAt++, solver->get_solve_stats().numSimplify);
     sqlite3_bind_int64(stmtReduceDB, bindAt++, solver->sumRestarts());
-    sqlite3_bind_int64(stmtReduceDB, bindAt++, solver->sumConflicts());
+    sqlite3_bind_int64(stmtReduceDB, bindAt++, solver->sumConflicts);
     sqlite3_bind_double(stmtReduceDB, bindAt++, cpuTime());
     sqlite3_bind_int64(stmtReduceDB, bindAt++, solver->reduceDB->get_nbReduceDB());
 
@@ -713,8 +698,6 @@ void SQLiteStats::reduceDB(
 
     sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.removed.antec_data.binIrred);
     sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.removed.antec_data.binRed);
-    sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.removed.antec_data.triIrred);
-    sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.removed.antec_data.triRed);
     sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.removed.antec_data.longIrred);
     sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.removed.antec_data.longRed);
 
@@ -734,8 +717,6 @@ void SQLiteStats::reduceDB(
 
     sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.remain.antec_data.binIrred);
     sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.remain.antec_data.binRed);
-    sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.remain.antec_data.triIrred);
-    sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.remain.antec_data.triRed);
     sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.remain.antec_data.longIrred);
     sqlite3_bind_int64(stmtReduceDB, bindAt++, clean.remain.antec_data.longRed);
 
@@ -773,7 +754,7 @@ void SQLiteStats::reduceDB(
 
 void SQLiteStats::init_clause_stats_STMT()
 {
-    const size_t numElems = 47;
+    const size_t numElems = 45;
 
     std::stringstream ss;
     ss << "insert into `clauseStats`"
@@ -797,8 +778,6 @@ void SQLiteStats::init_clause_stats_STMT()
 
     << " `atedecents_binIrred`,"
     << " `atedecents_binRed`,"
-    << " `atedecents_triIrred`,"
-    << " `atedecents_triRed`,"
     << " `atedecents_longIrred`,"
     << " `atedecents_longRed`,"
 
@@ -874,7 +853,7 @@ void SQLiteStats::dump_clause_stats(
     sqlite3_bind_int64(stmt_clause_stats, bindAt++, runID);
     sqlite3_bind_int64(stmt_clause_stats, bindAt++, solver->get_solve_stats().numSimplify);
     sqlite3_bind_int64(stmt_clause_stats, bindAt++, solver->sumRestarts());
-    sqlite3_bind_int64(stmt_clause_stats, bindAt++, solver->sumConflicts());
+    sqlite3_bind_int64(stmt_clause_stats, bindAt++, solver->sumConflicts);
     sqlite3_bind_int64(stmt_clause_stats, bindAt++, clauseID);
 
     sqlite3_bind_int(stmt_clause_stats, bindAt++, glue);
@@ -890,8 +869,6 @@ void SQLiteStats::dump_clause_stats(
 
     sqlite3_bind_int(stmt_clause_stats, bindAt++, antec_data.binIrred);
     sqlite3_bind_int(stmt_clause_stats, bindAt++, antec_data.binRed);
-    sqlite3_bind_int(stmt_clause_stats, bindAt++, antec_data.triIrred);
-    sqlite3_bind_int(stmt_clause_stats, bindAt++, antec_data.triRed);
     sqlite3_bind_int(stmt_clause_stats, bindAt++, antec_data.longIrred);
     sqlite3_bind_int(stmt_clause_stats, bindAt++, antec_data.longRed);
 

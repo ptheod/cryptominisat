@@ -24,15 +24,16 @@ THE SOFTWARE.
 #ifndef TIME_MEM_H
 #define TIME_MEM_H
 #include "constants.h"
-#include "assert.h"
+#include <cassert>
+#include <time.h>
 
-#include <unistd.h>
 #include <ios>
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <signal.h>
 
-#if defined (_MSC_VER) || defined(CROSS_COMPILE)
+#if defined (_MSC_VER) || defined CROSS_COMPILE
 #include <ctime>
 static inline double cpuTime(void)
 {
@@ -85,7 +86,7 @@ static inline double realTime()
     return ((double)(seconds + useconds))/(1000.0*1000.0);
 }
 
-#endif //CROSS_COMPILE
+#endif
 
 #if defined(__linux__)
 // process_mem_usage(double &, double &) - takes two doubles by reference,

@@ -26,10 +26,10 @@ IN THE SOFTWARE.
  * solving library.
  */
 
-#include "cryptominisat4/cryptominisat.h"
+#include "cryptominisat5/cryptominisat.h"
 #include <vector>
 #include <complex>
-#include <assert.h>
+#include <cassert>
 #include "constants.h"
 
 using std::vector;

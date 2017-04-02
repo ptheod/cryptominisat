@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifndef CLAUSEALLOCATOR_H
 #define CLAUSEALLOCATOR_H
@@ -32,7 +33,7 @@
 #include <map>
 #include <vector>
 
-#define BASE_DATA_TYPE uint64_t
+#define BASE_DATA_TYPE uint32_t
 
 namespace CMSat {
 
@@ -58,17 +59,14 @@ class ClauseAllocator {
         ~ClauseAllocator();
 
         template<class T>
-        Clause* Clause_new(
-            const T& ps
+        Clause* Clause_new(const T& ps, const uint32_t conflictNum
             #ifdef STATS_NEEDED
-            , const uint32_t conflictNum
             , const int64_t ID
             #endif
         ) {
             void* mem = allocEnough(ps.size());
-            Clause* real= new (mem) Clause(ps
+            Clause* real = new (mem) Clause(ps, conflictNum
             #ifdef STATS_NEEDED
-            , conflictNum
             , ID
             #endif
             );
@@ -80,7 +78,7 @@ class ClauseAllocator {
 
         inline Clause* ptr(const uint32_t offset) const
         {
-            return (Clause*)(dataStart + offset);
+            return (Clause*)(&dataStart[offset]);
         }
 
         void clauseFree(Clause* c); ///Frees memory and associated clause number
@@ -94,12 +92,15 @@ class ClauseAllocator {
         size_t mem_used() const;
 
     private:
-        void updateAllOffsetsAndPointers(
-            Solver* solver
-            , const vector<ClOffset>& offsets
-        );
+        void update_offsets(vector<ClOffset>& offsets);
 
-        BASE_DATA_TYPE* dataStart; ///<Stacks start at these positions
+        uint32_t move_cl(
+            uint32_t* newDataStart
+            , uint32_t*& new_ptr
+            , Clause* old
+        ) const;
+
+        BASE_DATA_TYPE* dataStart; ///<Stack starts at these positions
         size_t size; ///<The number of BASE_DATA_TYPE datapieces currently used in each stack
         /**
         @brief Clauses in the stack had this size when they were allocated
@@ -107,8 +108,7 @@ class ClauseAllocator {
         the running of the solver. Therefore, it is imperative that their orignal
         size is saved. This way, we can later move clauses around.
         */
-        vector<uint32_t> origClauseSizes;
-        size_t maxSize; ///<The number of BASE_DATA_TYPE datapieces allocated
+        size_t capacity; ///<The number of BASE_DATA_TYPE datapieces allocated
         /**
         @brief The estimated used size of the stack
         This is incremented by clauseSize each time a clause is allocated, and

@@ -1,24 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
 
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifndef BITARRAY_H
 #define BITARRAY_H
@@ -26,7 +26,7 @@
 //#define DEBUG_BITARRAY
 
 #include <string.h>
-#include <assert.h>
+#include <cassert>
 #include "constants.h"
 #include <stdlib.h>
 
@@ -36,23 +36,17 @@ namespace CMSat {
 class BitArray
 {
 public:
-    BitArray() :
-        size(0)
-        , mp(NULL)
-    {
-    }
-
-    BitArray(const BitArray& b) :
-        size(b.size)
-    {
-        mp = (uint64_t*)malloc(size*sizeof(uint64_t));
-        assert(mp != NULL);
-        memcpy(mp, b.mp, sizeof(uint64_t)*size);
-    }
-
     ~BitArray()
     {
         free(mp);
+    }
+
+    BitArray()
+    {}
+
+    BitArray(const BitArray& other)
+    {
+        *this = other;
     }
 
     BitArray& operator=(const BitArray& b)
@@ -63,54 +57,6 @@ public:
             size = b.size;
         }
         memcpy(mp, b.mp, size*sizeof(uint64_t));
-
-        return *this;
-    }
-
-    BitArray& operator&=(const BitArray& b)
-    {
-        assert(size == b.size);
-        uint64_t* t1 = mp;
-        uint64_t* t2 = b.mp;
-        for (uint64_t i = 0; i < size; ++i) {
-            *t1 &= *t2;
-            ++t1;
-            ++t2;
-        }
-
-        return *this;
-    }
-
-    BitArray& removeThese(const BitArray& b)
-    {
-        assert(size == b.size);
-        uint64_t* t1 = mp;
-        uint64_t* t2 = b.mp;
-        for (uint64_t i = 0; i < size; ++i) {
-            *t1 &= ~(*t2);
-            ++t1;
-            ++t2;
-        }
-
-        return *this;
-    }
-
-    template<class T>
-    BitArray& removeThese(const T& rem)
-    {
-        for (size_t i = 0; i < rem.size(); ++i) {
-            clearBit(rem[i]);
-        }
-
-        return *this;
-    }
-
-    template<class T>
-    BitArray& removeTheseLit(const T& rem)
-    {
-        for (uint32_t i = 0; i < rem.size(); i++) {
-            clearBit(rem[i].var());
-        }
 
         return *this;
     }
@@ -139,12 +85,16 @@ public:
 
     inline void setZero()
     {
-        memset(mp, 0, size*sizeof(uint64_t));
+        if (size != 0) {
+            memset(mp, 0, size*sizeof(uint64_t));
+        }
     }
 
     inline void setOne()
     {
-        memset(mp, 0xff, size*sizeof(uint64_t));
+        if (size != 0) {
+            memset(mp, 0xff, size*sizeof(uint64_t));
+        }
     }
 
     inline void clearBit(const uint32_t i)
@@ -181,8 +131,8 @@ public:
 
 private:
 
-    uint32_t size;
-    uint64_t* mp;
+    uint32_t size = 0;
+    uint64_t* mp = NULL;
 };
 
 } //end namespace

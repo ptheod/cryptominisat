@@ -1,23 +1,24 @@
-/*
- * CryptoMiniSat
- *
- * Copyright (c) 2009-2015, Mate Soos. All rights reserved.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation
- * version 2.0 of the License.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301  USA
-*/
+/******************************************
+Copyright (c) 2016, Mate Soos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+***********************************************/
 
 #ifndef GAUSSIAN_H
 #define GAUSSIAN_H
@@ -29,7 +30,7 @@
 #include <vector>
 
 #include "solvertypes.h"
-#include "gaussianconfig.h"
+#include "gaussconfig.h"
 #include "propby.h"
 #include "packedmatrix.h"
 #include "bitarray.h"
@@ -44,33 +45,10 @@ using std::string;
 using std::pair;
 using std::vector;
 
+enum gauss_ret {gauss_cont, gauss_confl, gauss_false, gauss_nothing};
+
 class Clause;
 class Solver;
-
-/// Hackish lbool that also supports l_Nothing and l_Continue
-class llbool
-{
-    char value;
-
-public:
-    llbool(): value(0) {};
-    explicit llbool(lbool v) :
-            value(v.value) {};
-    explicit llbool(char a) :
-            value(a) {}
-
-    inline bool operator!=(const llbool& v) const {
-        return (v.value != value);
-    }
-
-    inline bool operator==(const llbool& v) const {
-        return (v.value == value);
-    }
-
-    friend class lbool;
-};
-const llbool l_Nothing  = llbool(2);
-const llbool l_Continue = llbool(3);
 
 struct GaussClauseToClear
 {
@@ -91,7 +69,7 @@ public:
     ~Gaussian();
 
     bool init_until_fixedpoint();
-    llbool find_truths();
+    gauss_ret find_truths();
 
     //statistics
     void print_stats() const;
@@ -105,15 +83,14 @@ public:
 
     //functions used throughout the Solver
     void canceling(const uint32_t sublevel);
-    void assert_clauses_toclear_is_empty() {
-        for(GaussClauseToClear& c : clauses_toclear) {
-            cout << "Sublevel: " << c.sublevel << endl;
-        }
-        assert(clauses_toclear.empty());
-    }
+    vector<GaussClauseToClear> clauses_toclear;
+    PropBy found_conflict;
 
 protected:
     Solver* solver;
+    vector<uint16_t>& seen;
+    vector<uint8_t>& seen2; //for marking changed_rows
+    vector<uint16_t> var_to_col;
 
     //Gauss high-level configuration
     const GaussConf& config;
@@ -130,14 +107,17 @@ protected:
     {
     public:
         PackedMatrix matrix; // The matrix, updated to reflect variable assignements
-        BitArray var_is_set;
-        vector<uint32_t> col_to_var; // col_to_var[COL] tells which variable is at a given column in the matrix. Gives unassigned_var if the COL has been zeroed (i.e. the variable assigned)
-        uint16_t num_rows; // number of active rows in the matrix. Unactive rows are rows that contain only zeros (and if they are conflicting, then the conflict has been treated)
-        uint32_t num_cols; // number of active columns in the matrix. The columns at the end that have all be zeroed are no longer active
+        uint16_t num_rows = 0; // number of active rows in the matrix. Unactive rows are rows that contain only zeros (and if they are conflicting, then the conflict has been treated)
+        uint16_t num_cols = 0; // number of active columns in the matrix. The columns at the end that have all be zeroed are no longer active
         int least_column_changed; // when updating the matrix, this value contains the smallest column number that has been updated  (Gauss elim. can start from here instead of from column 0)
-        vector<uint16_t> last_one_in_col; //last_one_in_col[COL] tells the last row+1 that has a '1' in that column. Used to reduce the burden of Gauss elim. (it only needs to look until that row)
-        vector<uint16_t> first_one_in_row;
         uint32_t removeable_cols; // the number of columns that have been zeroed out (i.e. assigned)
+
+        vector<char> col_is_set;
+        vector<uint32_t> col_to_var; // col_to_var[COL] tells which variable is at a given column in the matrix. Gives unassigned_var if the COL has been zeroed (i.e. the variable assigned)
+        vector<uint16_t> last_one_in_col; //last_one_in_col[COL] tells the last row+1 that has a '1' in that column. Used to reduce the burden of Gauss elim. (it only needs to look until that row)
+
+
+        vector<uint16_t> first_one_in_row; //first columnt with a '1' in [ROW]
     };
 
     //Saved states
@@ -151,7 +131,7 @@ protected:
 
     //State of current elimnation
     vector<uint32_t> propagatable_rows; //used to store which rows were deemed propagatable during elimination
-    vector<unsigned char> changed_rows; //used to store which rows were deemed propagatable during elimination
+    vector<uint32_t> changed_rows; //used to store which rows were deemed propagatable during elimination
 
     //Statistics
     uint32_t useful_prop = 0; //how many times Gauss gave propagation as a result
@@ -162,7 +142,7 @@ protected:
     //gauss init functions
     void init(); // Initalise gauss state
     void fill_matrix(matrixset& origMat); // Fills the origMat matrix
-    uint32_t select_columnorder(vector<uint16_t>& var_to_col, matrixset& origMat); // Fills var_to_col and col_to_var of the origMat matrix.
+    uint32_t select_columnorder(matrixset& origMat); // Fills var_to_col and col_to_var of the origMat matrix.
 
     //Main function
     uint32_t eliminate(matrixset& matrix); //does the actual gaussian elimination
@@ -180,10 +160,6 @@ protected:
     gaussian_ret handle_matrix_confl(PropBy& confl, const matrixset& m, const uint32_t maxlevel, const uint32_t best_row);
     gaussian_ret handle_matrix_prop(matrixset& m, const uint32_t row); // Handle matrix propagation at row 'row'
     vector<Lit> tmp_clause;
-
-    //propagation&conflict handling
-    void cancel_until_sublevel(const uint32_t until_sublevel); // cancels until sublevel 'until_sublevel'. The var 'until_sublevel' must NOT go over the current level. I.e. this function is ONLY for moving inside the current level
-    uint32_t find_sublevel(const uint32_t v) const; // find the sublevel (i.e. trail[X]) of a given variable
 
     //helper functions
     bool at_first_init() const;
@@ -206,7 +182,6 @@ private:
     void print_last_one_in_cols(matrixset& m) const;
     static string lbool_to_string(const lbool toprint);
     vector<Xor> xors;
-    vector<GaussClauseToClear> clauses_toclear;
 };
 
 inline bool Gaussian::should_check_gauss(const uint32_t decisionlevel) const
