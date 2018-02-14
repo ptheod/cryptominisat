@@ -125,7 +125,8 @@ void Main::readInAFile(SATSolver* solver2, const string& filename)
         std::exit(1);
     }
 
-    if (!parser.parse_DIMACS(in)) {
+    bool strict_header = conf.preprocess;
+    if (!parser.parse_DIMACS(in, strict_header)) {
         exit(-1);
     }
 
@@ -164,7 +165,7 @@ void Main::readInStandardInput(SATSolver* solver2)
     DimacsParser<StreamBuffer<gzFile, GZ> > parser(solver2, debugLib, conf.verbosity);
     #endif
 
-    if (!parser.parse_DIMACS(in)) {
+    if (!parser.parse_DIMACS(in, false)) {
         exit(-1);
     }
 
@@ -256,11 +257,9 @@ void Main::add_supported_options()
         , "[0..] Random seed")
     ("threads,t", po::value(&num_threads)->default_value(1)
         ,"Number of threads")
-    ("sync", po::value(&conf.sync_every_confl)->default_value(conf.sync_every_confl)
-        , "Sync threads every N conflicts")
     ("maxtime", po::value(&conf.maxTime)->default_value(conf.maxTime, "MAX")
         , "Stop solving after this much time (s)")
-    ("maxconfl", po::value(&conf.maxConfl)->default_value(conf.maxConfl, "MAX")
+    ("maxconfl", po::value(&conf.max_confl)->default_value(conf.max_confl, "MAX")
         , "Stop solving after this many conflicts")
 //     ("undef", po::value(&conf.greedy_undef)->default_value(conf.greedy_undef)
 //         , "Set as many variables in solution to UNDEF as possible if solution is SAT")
@@ -347,7 +346,7 @@ void Main::add_supported_options()
     ("debuglib", po::value<string>(&debugLib)
         , "MainSolver at specific 'solve()' points in CNF file")
     ("dumpresult", po::value(&resultFilename)
-        , "Write result(s) to this file")
+        , "Write solution(s) to this file")
     ;
 
     po::options_description probeOptions("Probing options");
@@ -606,6 +605,8 @@ void Main::add_supported_options()
     ;
 
     hiddenOptions.add_options()
+    ("sync", po::value(&conf.sync_every_confl)->default_value(conf.sync_every_confl)
+        , "Sync threads every N conflicts")
     ("dratdebug", po::bool_switch(&dratDebug)
         , "Output DRAT verification into the console. Helpful to see where DRAT fails -- use in conjunction with --verb 20")
     ("clearinter", po::value(&need_clean_exit)->default_value(0)
@@ -695,7 +696,7 @@ void Main::check_options_correctness()
             cout << help_options_complicated << endl;
             cout << "NORMAL RUN SCHEDULES" << endl;
             cout << "--------------------" << endl;
-            cout << "Default schedule: " << conf.simplify_schedule_nonstartup << endl;
+            cout << "Default schedule: " << conf.simplify_schedule_nonstartup << endl<< endl;
             cout << "Default schedule at startup: " << conf.simplify_schedule_startup << endl << endl;
 
             cout << "PREPROC RUN SCHEDULES" << endl;
@@ -917,7 +918,6 @@ void Main::manually_parse_some_options()
 
     if (conf.preprocess != 0) {
         conf.varelim_time_limitM *= 5;
-        conf.varElimRatioPerIter = 2.0;
         conf.global_timeout_multiplier *= 1.5;
         if (conf.doCompHandler) {
             conf.doCompHandler = false;
@@ -945,8 +945,8 @@ void Main::manually_parse_some_options()
         }
 
         if (!filesToRead.empty()) {
-            std::cerr << "ERROR: reading in CNF file(s) make no sense with preprocessing. Exiting." << endl;
-            std::exit(-1);
+            assert(false && "we should never reach this place, filesToRead has not been populated yet");
+            exit(-1);
         }
 
         if (!debugLib.empty()) {
@@ -969,7 +969,7 @@ void Main::manually_parse_some_options()
         }
 
         if (!vm.count("eratio")) {
-            conf.varElimRatioPerIter = 1.0;
+            conf.varElimRatioPerIter = 2.0;
         }
     }
 
@@ -1009,7 +1009,9 @@ void Main::manually_parse_some_options()
 
         vector<string> solution = vm["input"].as<vector<string> >();
         if (solution.size() > 1) {
-            cout << "ERROR: When post-processing you must give only the solution as the positional argument"
+            cout << "ERROR: When post-processing you must give only the solution as the positional argument."
+            << endl
+            << "The saved state must be given as the argument '--savedsate X'"
             << endl;
             std::exit(-1);
         }

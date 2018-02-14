@@ -67,7 +67,7 @@ class Searcher : public HyperEngine
         // Solving
         //
         lbool solve(
-            uint64_t maxConfls
+            uint64_t max_confls
             , const unsigned upper_level_iteration_num
         );
         void finish_up_solve(lbool status);
@@ -401,7 +401,6 @@ class Searcher : public HyperEngine
         //Other
         void print_solution_type(const lbool status) const;
         void clearGaussMatrixes();
-        void sortWatched();
 
         //Picking polarity when doing decision
         bool     pickPolarity(const uint32_t var);

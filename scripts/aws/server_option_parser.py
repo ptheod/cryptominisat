@@ -27,11 +27,12 @@ To use other solvers, give:
 --solver MapleCOMSPS/simp/maplecomsps_static
 --solver cmsat-satcomp16/bin/cryptominisat4_simple
 --solver lingeling-bbc/build/lingeling/lingeling_bbc
+--solver Maple_LCM_Dist/Maple_LCM_Dist # ONLY WORKS WITH --drat !!!
 
 
 Use-cases:
 # normal run
-./launch_server.py --cnflist satcomp14 --folder norm
+./launch_server.py --cnflist satcomp17_updated
 
 # stats run
 ./launch_server.py --cnf test_updated --stats --drat --tout 600 --memlimit 10000

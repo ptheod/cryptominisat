@@ -46,10 +46,6 @@ using namespace CMSat;
 using std::cout;
 using std::endl;
 
-#ifdef USE_OMP
-#include <omp.h>
-#endif
-
 //#define VERBOSE_DEBUG_GEN_CONFL_DOT
 
 #ifdef VERBOSE_DEBUG
@@ -96,8 +92,8 @@ void Searcher::new_vars(size_t n)
 {
     PropEngine::new_vars(n);
 
-    var_act_vsids.resize(var_act_vsids.size() + n, 0);
-    var_act_maple.resize(var_act_maple.size() + n, 0);
+    var_act_vsids.insert(var_act_vsids.end(), n, 0);
+    var_act_maple.insert(var_act_maple.end(), n, 0);
     for(int i = n-1; i >= 0; i--) {
         insert_var_order_all((int)nVars()-i-1);
     }
@@ -1190,11 +1186,14 @@ lbool Searcher::new_decision()
 
 double Searcher::luby(double y, int x)
 {
-    int size, seq;
-    for (size = 1, seq = 0
+    int size = 1;
+    int seq;
+    for (seq = 0
         ; size < x + 1
-        ; seq++, size = 2 * size + 1
-    );
+        ; seq++
+    ) {
+        size = 2 * size + 1;
+    }
 
     while (size - 1 != x) {
         size = (size - 1) >> 1;
@@ -1954,7 +1953,6 @@ bool Searcher::clean_clauses_if_needed()
 
         cl_alloc.consolidate(solver);
         rebuildOrderHeap(); //TODO only filter is needed!
-        sortWatched();
         simpDB_props = (litStats.redLits + litStats.irredLits)<<5;
     }
 
@@ -2077,12 +2075,12 @@ void Searcher::print_search_loop_num()
 }
 
 lbool Searcher::solve(
-    const uint64_t _maxConfls
+    const uint64_t _max_confls
     , const unsigned upper_level_iteration_num
 ) {
     assert(ok);
     assert(qhead == trail.size());
-    max_confl_per_search_solve_call = _maxConfls;
+    max_confl_per_search_solve_call = _max_confls;
     num_search_called++;
     #ifdef SLOW_DEBUG
     //When asking for a lot of simple soluitons, search() gets called a lot
@@ -3401,69 +3399,3 @@ void Searcher::clear_gauss()
     gauss_matrixes.clear();
 }
 #endif
-
-void Searcher::sortWatched()
-{
-    #ifdef VERBOSE_DEBUG
-    cout << "Sorting watchlists:" << endl;
-    #endif
-
-    vec<Watched> sorted;
-    const double myTime = cpuTime();
-    for (size_t i = 0
-        ; i < watches.watches.size()
-        ; ++i
-    ) {
-        vec<Watched>& ws = watches.watches[i];
-        if ((ws.size() <= 1) || (ws.size() > 20)) {
-            continue;
-        }
-
-        #ifdef VERBOSE_DEBUG
-        cout << "Before sorting: ";
-        for (uint32_t i2 = 0; i2 < ws.size(); i2++) {
-            if (ws[i2].isBin()) cout << "Binary,";
-            if (ws[i2].isClause()) cout << "Normal,";
-        }
-        cout << endl;
-        #endif //VERBOSE_DEBUG
-
-        sorted.clear();
-        for(Watched& w: ws) {
-            if (w.isBin()) {
-                sorted.push(w);
-            }
-        }
-        for(Watched& w: ws) {
-            if (!w.isBin()) {
-                sorted.push(w);
-            }
-        }
-        sorted.swap(ws);
-
-        #ifdef VERBOSE_DEBUG
-        cout << "After sorting : ";
-        for (uint32_t i2 = 0; i2 < ws.size(); i2++) {
-            if (ws[i2].isBin()) cout << "Binary,";
-            if (ws[i2].isClause()) cout << "Normal,";
-        }
-        cout << endl;
-        cout << " -- " << endl;
-        #endif //VERBOSE_DEBUG
-    }
-
-    if (conf.verbosity) {
-        cout << "c [w-sort] "
-        << conf.print_times(cpuTime()-myTime)
-        << endl;
-    }
-
-    if (solver->sqlStats) {
-        solver->sqlStats->time_passed_min(
-            solver
-            , "sortwatched"
-            , cpuTime()-myTime
-        );
-    }
-}
-

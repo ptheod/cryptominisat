@@ -215,7 +215,7 @@ class DLL_PUBLIC SolverConf
 
         //Limits
         double   maxTime;
-        long maxConfl;
+        long max_confl;
 
         //Glues
         int       update_glues_on_prop;
@@ -241,6 +241,7 @@ class DLL_PUBLIC SolverConf
         uint64_t varelim_cutoff_too_many_clauses;
         int      do_empty_varelim;
         long long empty_varelim_time_limitM;
+        long long varelim_sub_str_limit;
         long long varelim_time_limitM;
         int      updateVarElimComplexityOTF;
         uint64_t updateVarElimComplexityOTF_limitvars;
